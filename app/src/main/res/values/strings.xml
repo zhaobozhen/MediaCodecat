@@ -1,3 +1,50 @@
 <resources>
     <string name="app_name">MediaCodecat</string>
+    <string name="xposed_description">MediaCodec Cat</string>
+
+    <string name="tab_records">Records</string>
+    <string name="tab_overview">Overview</string>
+    <string name="tab_settings">Settings</string>
+
+    <string name="video_records_title">Video Records</string>
+    <plurals name="video_record_count_total">
+        <item quantity="one">%1$d record total</item>
+        <item quantity="other">%1$d records total</item>
+    </plurals>
+    <plurals name="video_record_count">
+        <item quantity="one">%1$d record</item>
+        <item quantity="other">%1$d records</item>
+    </plurals>
+    <string name="loading">Loading</string>
+    <string name="empty_video_records">No video records</string>
+
+    <string name="video_record_fallback_video">video</string>
+    <string name="video_record_unknown_size">unknown size</string>
+    <string name="video_record_empty_value">-</string>
+    <string name="video_record_codec_format">Codec %1$s</string>
+    <string name="video_record_overlay_codec_format">Codec: %1$s</string>
+    <string name="video_record_overlay_package_format">Package: %1$s</string>
+    <string name="video_record_overlay_bitrate_format">Bitrate: %1$s</string>
+    <string name="video_record_attribute_bitrate_format">bitrate %1$s</string>
+    <string name="video_record_attribute_frame_rate_format">fps %1$s</string>
+    <string name="video_record_attribute_rotation_format">rot %1$s</string>
+    <string name="video_record_attribute_color_format">color %1$s</string>
+    <string name="video_record_attribute_profile_format">profile %1$s</string>
+    <string name="video_record_bitrate_kbps_format">%1$d kbps</string>
+    <string name="video_record_color_standard_bt709">BT.709</string>
+    <string name="video_record_color_standard_bt601_pal">BT.601 PAL</string>
+    <string name="video_record_color_standard_bt601_ntsc">BT.601 NTSC</string>
+    <string name="video_record_color_standard_bt2020">BT.2020</string>
+    <string name="video_record_color_standard_unknown_format">std %1$d</string>
+    <string name="video_record_color_range_full">full</string>
+    <string name="video_record_color_range_limited">limited</string>
+    <string name="video_record_color_range_unknown_format">range %1$d</string>
+    <string name="video_record_color_transfer_linear">linear</string>
+    <string name="video_record_color_transfer_sdr">SDR</string>
+    <string name="video_record_color_transfer_pq">PQ</string>
+    <string name="video_record_color_transfer_hlg">HLG</string>
+    <string name="video_record_color_transfer_unknown_format">transfer %1$d</string>
+    <string name="video_record_profile_level_format">%1$d / %2$d</string>
+    <string name="video_record_level_format">L%1$d</string>
+    <string name="video_record_time_range_format">%1$s - %2$s</string>
 </resources>

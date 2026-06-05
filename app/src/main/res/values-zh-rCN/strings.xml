@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MediaCodecat</string>
+    <string name="xposed_description">MediaCodec Cat</string>
+
+    <string name="tab_records">记录</string>
+    <string name="tab_overview">概览</string>
+    <string name="tab_settings">设置</string>
+
+    <string name="video_records_title">视频记录</string>
+    <plurals name="video_record_count_total">
+        <item quantity="other">共 %1$d 条</item>
+    </plurals>
+    <plurals name="video_record_count">
+        <item quantity="other">%1$d 条</item>
+    </plurals>
+    <string name="loading">加载中</string>
+    <string name="empty_video_records">暂无视频记录</string>
+
+    <string name="video_record_fallback_video">视频</string>
+    <string name="video_record_unknown_size">未知尺寸</string>
+    <string name="video_record_empty_value">-</string>
+    <string name="video_record_codec_format">Codec %1$s</string>
+    <string name="video_record_overlay_codec_format">Codec：%1$s</string>
+    <string name="video_record_overlay_package_format">包名：%1$s</string>
+    <string name="video_record_overlay_bitrate_format">码率：%1$s</string>
+    <string name="video_record_attribute_bitrate_format">码率 %1$s</string>
+    <string name="video_record_attribute_frame_rate_format">帧率 %1$s</string>
+    <string name="video_record_attribute_rotation_format">旋转 %1$s</string>
+    <string name="video_record_attribute_color_format">色彩 %1$s</string>
+    <string name="video_record_attribute_profile_format">规格 %1$s</string>
+    <string name="video_record_bitrate_kbps_format">%1$d kbps</string>
+    <string name="video_record_color_standard_bt709">BT.709</string>
+    <string name="video_record_color_standard_bt601_pal">BT.601 PAL</string>
+    <string name="video_record_color_standard_bt601_ntsc">BT.601 NTSC</string>
+    <string name="video_record_color_standard_bt2020">BT.2020</string>
+    <string name="video_record_color_standard_unknown_format">标准 %1$d</string>
+    <string name="video_record_color_range_full">全范围</string>
+    <string name="video_record_color_range_limited">有限范围</string>
+    <string name="video_record_color_range_unknown_format">范围 %1$d</string>
+    <string name="video_record_color_transfer_linear">线性</string>
+    <string name="video_record_color_transfer_sdr">SDR</string>
+    <string name="video_record_color_transfer_pq">PQ</string>
+    <string name="video_record_color_transfer_hlg">HLG</string>
+    <string name="video_record_color_transfer_unknown_format">传递 %1$d</string>
+    <string name="video_record_profile_level_format">%1$d / %2$d</string>
+    <string name="video_record_level_format">L%1$d</string>
+    <string name="video_record_time_range_format">%1$s - %2$s</string>
+</resources>
