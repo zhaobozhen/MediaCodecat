@@ -23,12 +23,13 @@
     <string name="video_record_codec_format">Codec %1$s</string>
     <string name="video_record_overlay_codec_format">Codec：%1$s</string>
     <string name="video_record_overlay_package_format">包名：%1$s</string>
-    <string name="video_record_overlay_bitrate_format">码率：%1$s</string>
-    <string name="video_record_attribute_bitrate_format">码率 %1$s</string>
+    <string name="video_record_overlay_bitrate_format">估算码率：%1$s</string>
+    <string name="video_record_attribute_bitrate_format">估算码率 %1$s</string>
     <string name="video_record_attribute_frame_rate_format">帧率 %1$s</string>
     <string name="video_record_attribute_rotation_format">旋转 %1$s</string>
     <string name="video_record_attribute_color_format">色彩 %1$s</string>
     <string name="video_record_attribute_profile_format">规格 %1$s</string>
+    <string name="video_record_attribute_level_format">级别 %1$s</string>
     <string name="video_record_bitrate_kbps_format">%1$d kbps</string>
     <string name="video_record_color_standard_bt709">BT.709</string>
     <string name="video_record_color_standard_bt601_pal">BT.601 PAL</string>
@@ -43,7 +44,7 @@
     <string name="video_record_color_transfer_pq">PQ</string>
     <string name="video_record_color_transfer_hlg">HLG</string>
     <string name="video_record_color_transfer_unknown_format">传递 %1$d</string>
-    <string name="video_record_profile_level_format">%1$d / %2$d</string>
-    <string name="video_record_level_format">L%1$d</string>
+    <string name="video_record_profile_unknown_format">未知规格（%1$d）</string>
+    <string name="video_record_level_unknown_format">未知级别（%1$d）</string>
     <string name="video_record_time_range_format">%1$s - %2$s</string>
 </resources>

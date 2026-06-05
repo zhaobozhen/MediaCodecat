@@ -24,12 +24,13 @@
     <string name="video_record_codec_format">Codec %1$s</string>
     <string name="video_record_overlay_codec_format">Codec: %1$s</string>
     <string name="video_record_overlay_package_format">Package: %1$s</string>
-    <string name="video_record_overlay_bitrate_format">Bitrate: %1$s</string>
-    <string name="video_record_attribute_bitrate_format">bitrate %1$s</string>
+    <string name="video_record_overlay_bitrate_format">Estimated bitrate: %1$s</string>
+    <string name="video_record_attribute_bitrate_format">est. bitrate %1$s</string>
     <string name="video_record_attribute_frame_rate_format">fps %1$s</string>
     <string name="video_record_attribute_rotation_format">rot %1$s</string>
     <string name="video_record_attribute_color_format">color %1$s</string>
     <string name="video_record_attribute_profile_format">profile %1$s</string>
+    <string name="video_record_attribute_level_format">level %1$s</string>
     <string name="video_record_bitrate_kbps_format">%1$d kbps</string>
     <string name="video_record_color_standard_bt709">BT.709</string>
     <string name="video_record_color_standard_bt601_pal">BT.601 PAL</string>
@@ -44,7 +45,7 @@
     <string name="video_record_color_transfer_pq">PQ</string>
     <string name="video_record_color_transfer_hlg">HLG</string>
     <string name="video_record_color_transfer_unknown_format">transfer %1$d</string>
-    <string name="video_record_profile_level_format">%1$d / %2$d</string>
-    <string name="video_record_level_format">L%1$d</string>
+    <string name="video_record_profile_unknown_format">unknown profile (%1$d)</string>
+    <string name="video_record_level_unknown_format">unknown level (%1$d)</string>
     <string name="video_record_time_range_format">%1$s - %2$s</string>
 </resources>
