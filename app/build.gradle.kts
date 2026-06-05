@@ -63,7 +63,6 @@ dependencies {
     ksp(libs.yukihookapi.ksp.xposed)
     implementation(libs.backdrop)
     implementation(libs.capsule)
-    implementation(libs.mmkv)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
