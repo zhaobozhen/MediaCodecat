@@ -1,4 +1,6 @@
 package com.absinthe.mediacodecat.model
 
-class FrameEvent {
-}
+data class FrameEvent(
+    val pts: Long,
+    val size: Int
+)
