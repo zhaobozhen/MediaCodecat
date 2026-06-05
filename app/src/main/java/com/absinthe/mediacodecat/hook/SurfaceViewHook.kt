@@ -27,7 +27,7 @@ object SurfaceViewHook : YukiBaseHooker() {
                     holder.addCallback(object : SurfaceHolder.Callback {
                         override fun surfaceCreated(holder: SurfaceHolder) {
                             val parentView = view.parent as? View ?: return
-                            SurfaceRegistry.register(holder.surface, parentView)
+                            SurfaceRegistry.register(holder.surface, parentView, view)
                             YLog.debug("SurfaceRegistry: surface=${holder.surface}, parent=$parentView")
 
                             parentView.post {

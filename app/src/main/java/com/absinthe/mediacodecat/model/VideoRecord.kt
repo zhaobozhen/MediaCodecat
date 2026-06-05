@@ -66,27 +66,40 @@ data class VideoRecord(
             format: MediaFormat,
             firstSeenAtMs: Long,
             lastSeenAtMs: Long = firstSeenAtMs,
-            bitrateKbps: Int? = null
+            bitrateKbps: Int? = null,
+            estimatedFrameRate: Float? = null
         ): VideoRecord {
+            val rotationDegrees = format.optRotationDegrees()
+            val displaySize = format.displaySize(rotationDegrees)
+            val recordBitrateKbps = bitrateKbps.validPositive()
+                ?: format.optBitrateKbps(MediaFormat.KEY_BIT_RATE)
+            val recordFrameRate = format.optPositiveFloat(MediaFormat.KEY_FRAME_RATE)
+                ?: estimatedFrameRate.validFrameRate()
+
             return VideoRecord(
                 sessionId = sessionId,
                 packageName = packageName,
                 processName = processName,
                 codecName = codecName,
                 mime = format.optString(MediaFormat.KEY_MIME).orEmpty(),
-                width = format.optInt(MediaFormat.KEY_WIDTH),
-                height = format.optInt(MediaFormat.KEY_HEIGHT),
-                frameRate = format.optFloat(MediaFormat.KEY_FRAME_RATE),
-                rotationDegrees = format.optInt(MediaFormat.KEY_ROTATION),
-                colorFormat = format.optInt(MediaFormat.KEY_COLOR_FORMAT),
-                colorStandard = format.optInt(MediaFormat.KEY_COLOR_STANDARD),
-                colorRange = format.optInt(MediaFormat.KEY_COLOR_RANGE),
-                colorTransfer = format.optInt(MediaFormat.KEY_COLOR_TRANSFER),
-                profile = format.optInt(MediaFormat.KEY_PROFILE),
-                level = format.optInt(MediaFormat.KEY_LEVEL),
-                bitrateKbps = bitrateKbps,
+                width = displaySize?.first,
+                height = displaySize?.second,
+                frameRate = recordFrameRate,
+                rotationDegrees = rotationDegrees,
+                colorFormat = format.optPositiveInt(MediaFormat.KEY_COLOR_FORMAT),
+                colorStandard = format.optPositiveInt(MediaFormat.KEY_COLOR_STANDARD),
+                colorRange = format.optPositiveInt(MediaFormat.KEY_COLOR_RANGE),
+                colorTransfer = format.optPositiveInt(MediaFormat.KEY_COLOR_TRANSFER),
+                profile = format.optPositiveInt(MediaFormat.KEY_PROFILE),
+                level = format.optPositiveInt(MediaFormat.KEY_LEVEL),
+                bitrateKbps = recordBitrateKbps,
                 surfaceId = surfaceId,
-                mediaFormat = format.toStableJson(),
+                mediaFormat = format.toStableJson(
+                    displayWidth = displaySize?.first,
+                    displayHeight = displaySize?.second,
+                    bitrateKbps = recordBitrateKbps,
+                    frameRate = recordFrameRate
+                ),
                 firstSeenAtMs = firstSeenAtMs,
                 lastSeenAtMs = lastSeenAtMs
             )
@@ -148,11 +161,65 @@ data class VideoRecord(
             if (containsKey(key)) getNumber(key)?.toInt() else null
         }.getOrNull()
 
+        private fun MediaFormat.optPositiveInt(key: String): Int? = optInt(key).validPositive()
+
+        private fun Int?.validPositive(): Int? = takeIf { it != null && it > 0 }
+
         private fun MediaFormat.optFloat(key: String): Float? = runCatching {
             if (containsKey(key)) getNumber(key)?.toFloat() else null
         }.getOrNull()
 
-        private fun MediaFormat.toStableJson(): String {
+        private fun MediaFormat.optPositiveFloat(key: String): Float? = optFloat(key).validFrameRate()
+
+        private fun Float?.validFrameRate(): Float? {
+            return takeIf { it != null && it.isFinite() && it > 0f && it <= 1000f }
+        }
+
+        private fun MediaFormat.optLong(key: String): Long? = runCatching {
+            if (containsKey(key)) getNumber(key)?.toLong() else null
+        }.getOrNull()
+
+        private fun MediaFormat.optBitrateKbps(key: String): Int? {
+            val bps = optLong(key)?.takeIf { it > 0 } ?: return null
+            return (bps / 1000L).coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+
+        private fun MediaFormat.optRotationDegrees(): Int? {
+            val rotation = optInt(MediaFormat.KEY_ROTATION) ?: return null
+            return when (rotation.floorMod(360)) {
+                0, 90, 180, 270 -> rotation.floorMod(360)
+                else -> null
+            }
+        }
+
+        private fun MediaFormat.displaySize(rotationDegrees: Int?): Pair<Int, Int>? {
+            val croppedWidth = cropSize(CROP_LEFT, CROP_RIGHT)
+            val croppedHeight = cropSize(CROP_TOP, CROP_BOTTOM)
+            val width = croppedWidth ?: optPositiveInt(MediaFormat.KEY_WIDTH)
+            val height = croppedHeight ?: optPositiveInt(MediaFormat.KEY_HEIGHT)
+            if (width == null || height == null) return null
+
+            return if (rotationDegrees == 90 || rotationDegrees == 270) {
+                height to width
+            } else {
+                width to height
+            }
+        }
+
+        private fun MediaFormat.cropSize(startKey: String, endKey: String): Int? {
+            val start = optInt(startKey) ?: return null
+            val end = optInt(endKey) ?: return null
+            return (end - start + 1).takeIf { it > 0 }
+        }
+
+        private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
+
+        private fun MediaFormat.toStableJson(
+            displayWidth: Int?,
+            displayHeight: Int?,
+            bitrateKbps: Int?,
+            frameRate: Float?
+        ): String {
             val json = JSONObject()
             keys.sorted().forEach { key ->
                 val value = runCatching {
@@ -168,6 +235,10 @@ data class VideoRecord(
                 }.getOrNull()
                 json.put(key, value ?: JSONObject.NULL)
             }
+            json.put("_display_width", displayWidth ?: JSONObject.NULL)
+            json.put("_display_height", displayHeight ?: JSONObject.NULL)
+            json.put("_bitrate_kbps", bitrateKbps ?: JSONObject.NULL)
+            json.put("_frame_rate", frameRate?.toDouble() ?: JSONObject.NULL)
             json.put("_raw", toString())
             return json.toString()
         }
@@ -193,5 +264,10 @@ data class VideoRecord(
             val index = getColumnIndex(column)
             return if (index >= 0 && !isNull(index)) getFloat(index) else null
         }
+
+        private const val CROP_LEFT = "crop-left"
+        private const val CROP_RIGHT = "crop-right"
+        private const val CROP_TOP = "crop-top"
+        private const val CROP_BOTTOM = "crop-bottom"
     }
 }

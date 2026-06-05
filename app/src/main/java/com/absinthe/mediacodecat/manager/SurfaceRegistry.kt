@@ -1,6 +1,7 @@
 package com.absinthe.mediacodecat.manager
 
 import android.view.Surface
+import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -14,6 +15,13 @@ object SurfaceRegistry {
 
     fun register(surface: Surface, parent: View) {
         map.getOrPut(surface) { Item(parent = parent) }.parent = parent
+    }
+
+    fun register(surface: Surface, parent: View, surfaceView: SurfaceView) {
+        map.getOrPut(surface) { Item(parent = parent, surfaceView = surfaceView) }.apply {
+            this.parent = parent
+            this.surfaceView = surfaceView
+        }
     }
 
     fun addTextView(surface: Surface, view: TextView) {
@@ -42,6 +50,7 @@ object SurfaceRegistry {
     }
 
     fun findParentView(surface: Surface): View? = map[surface]?.parent
+    fun findSurfaceView(surface: Surface): SurfaceView? = map[surface]?.surfaceView
 
     fun findTextView(surface: Surface): TextView? = map[surface]?.textView
     fun findTextView(): TextView? = map.values.firstOrNull()?.textView
@@ -51,6 +60,7 @@ object SurfaceRegistry {
 
 data class Item(
     var parent: View? = null,
+    var surfaceView: SurfaceView? = null,
     var textView: TextView? = null,
     var content: String = ""
 )

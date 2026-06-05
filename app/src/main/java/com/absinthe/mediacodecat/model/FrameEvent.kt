@@ -2,5 +2,6 @@ package com.absinthe.mediacodecat.model
 
 data class FrameEvent(
     val pts: Long,
-    val size: Int
+    val size: Int,
+    val presentationTimeUs: Long?
 )

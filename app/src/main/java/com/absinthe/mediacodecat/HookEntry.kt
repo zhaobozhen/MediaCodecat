@@ -20,7 +20,7 @@ object HookEntry : IYukiHookXposedInit {
         YLog.debug("onHook: processName=$processName, mainProcessName=$mainProcessName, packageName=$packageName")
         if (processName == packageName || packageName == "android" || packageName == "com.android.webview"||true) {
             loadApp(isExcludeSelf = true, MediaCodecHook)
-            loadApp(isExcludeSelf = true, SurfaceViewHook)
+            //loadApp(isExcludeSelf = true, SurfaceViewHook)
         }
 
 //        loadApp(isExcludeSelf = true, MediaPlayerHook)
