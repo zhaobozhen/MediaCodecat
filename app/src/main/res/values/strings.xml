@@ -29,7 +29,7 @@
     <string name="video_record_fallback_video">video</string>
     <string name="video_record_unknown_size">unknown size</string>
     <string name="video_record_empty_value">-</string>
-    <string name="video_record_codec_format">Codec %1$s</string>
+    <string name="video_record_codec_format">Codec: %1$s</string>
     <string name="video_record_overlay_codec_format">Codec: %1$s</string>
     <string name="video_record_overlay_package_format">Package: %1$s</string>
     <string name="video_record_overlay_bitrate_format">Estimated bitrate: %1$s</string>

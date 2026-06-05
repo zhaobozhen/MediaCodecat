@@ -28,7 +28,7 @@
     <string name="video_record_fallback_video">视频</string>
     <string name="video_record_unknown_size">未知尺寸</string>
     <string name="video_record_empty_value">-</string>
-    <string name="video_record_codec_format">Codec %1$s</string>
+    <string name="video_record_codec_format">Codec: %1$s</string>
     <string name="video_record_overlay_codec_format">Codec：%1$s</string>
     <string name="video_record_overlay_package_format">包名：%1$s</string>
     <string name="video_record_overlay_bitrate_format">估算码率：%1$s</string>
