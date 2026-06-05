@@ -36,14 +36,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -111,20 +114,58 @@ fun VideoRecordGallery(
     val appContext = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
     var records by remember { mutableStateOf<List<VideoRecord>>(emptyList()) }
+    var totalRecordsCount by remember { mutableIntStateOf(0) }
     var isLoaded by remember { mutableStateOf(false) }
+    var isLoadingPage by remember { mutableStateOf(false) }
+    var canLoadMore by remember { mutableStateOf(false) }
+    var loadGeneration by remember { mutableIntStateOf(0) }
     var coverVersion by remember { mutableIntStateOf(0) }
 
     fun refreshRecords() {
+        val generation = loadGeneration + 1
+        loadGeneration = generation
         scope.launch {
-            records = loadVideoRecords(appContext)
+            isLoadingPage = true
+            val page = loadVideoRecordPage(
+                context = appContext,
+                offset = 0,
+                knownTotalCount = null
+            )
+            if (generation != loadGeneration) return@launch
+
+            records = page.records
+            totalRecordsCount = page.totalCount
+            canLoadMore = page.hasMore
             coverVersion++
             isLoaded = true
+            isLoadingPage = false
+        }
+    }
+
+    fun loadNextPage() {
+        if (!isLoaded || isLoadingPage || !canLoadMore) return
+
+        val generation = loadGeneration
+        val offset = records.size
+        scope.launch {
+            isLoadingPage = true
+            val page = loadVideoRecordPage(
+                context = appContext,
+                offset = offset,
+                knownTotalCount = totalRecordsCount
+            )
+            if (generation != loadGeneration) return@launch
+
+            val mergedRecords = (records + page.records).distinctBy { it.sessionId }
+            records = mergedRecords
+            totalRecordsCount = page.totalCount
+            canLoadMore = page.hasMore && mergedRecords.size < page.totalCount
+            isLoadingPage = false
         }
     }
 
     LaunchedEffect(appContext) {
-        records = loadVideoRecords(appContext)
-        isLoaded = true
+        refreshRecords()
     }
 
     DisposableEffect(appContext) {
@@ -166,6 +207,9 @@ fun VideoRecordGallery(
                     backdrop = backdrop,
                     galleryItems = galleryItems,
                     coverVersion = coverVersion,
+                    isLoadingMore = isLoadingPage && isLoaded,
+                    canLoadMore = canLoadMore,
+                    onLoadMore = ::loadNextPage,
                     highlightAngle = highlightAngle,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -174,7 +218,7 @@ fun VideoRecordGallery(
 
         GalleryHeader(
             backdrop = headerBackdrop,
-            recordsCount = records.size,
+            recordsCount = totalRecordsCount,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -185,10 +229,14 @@ private fun RecordGrid(
     backdrop: Backdrop,
     galleryItems: List<VideoGalleryItem>,
     coverVersion: Int,
+    isLoadingMore: Boolean,
+    canLoadMore: Boolean,
+    onLoadMore: () -> Unit,
     highlightAngle: () -> Float,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
+        val gridState = rememberLazyGridState()
         val layoutDirection = LocalLayoutDirection.current
         val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
         val horizontalPadding = if (maxWidth < CompactWidthBreakpoint) 16.dp else 24.dp
@@ -201,9 +249,17 @@ private fun RecordGrid(
             end = safeDrawingPadding.calculateEndPadding(layoutDirection) + horizontalPadding,
             bottom = safeDrawingPadding.calculateBottomPadding() + 112.dp
         )
+        val shouldLoadMore by rememberShouldLoadMore(gridState)
+
+        LaunchedEffect(shouldLoadMore, canLoadMore, isLoadingMore) {
+            if (shouldLoadMore && canLoadMore && !isLoadingMore) {
+                onLoadMore()
+            }
+        }
 
         LazyVerticalGrid(
             columns = columns,
+            state = gridState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = contentPadding,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -227,7 +283,25 @@ private fun RecordGrid(
                     )
                 }
             }
+
+            if (isLoadingMore) {
+                item(
+                    key = LoadingMoreItemKey,
+                    span = { GridItemSpan(maxLineSpan) }
+                ) {
+                    LoadingMoreItem(modifier = Modifier.fillMaxWidth())
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun rememberShouldLoadMore(gridState: LazyGridState) = remember(gridState) {
+    derivedStateOf {
+        val layoutInfo = gridState.layoutInfo
+        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
+        lastVisibleIndex >= layoutInfo.totalItemsCount - LoadMorePrefetchItemThreshold
     }
 }
 
@@ -678,6 +752,22 @@ private fun LoadingState(
 }
 
 @Composable
+private fun LoadingMoreItem(
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = stringResource(R.string.loading),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
 private fun EmptyRecordState(
     backdrop: Backdrop,
     modifier: Modifier = Modifier
@@ -788,10 +878,35 @@ private fun Modifier.progressiveHeaderBackdrop(
     )
 }
 
-private suspend fun loadVideoRecords(context: Context): List<VideoRecord> {
+private suspend fun loadVideoRecordPage(
+    context: Context,
+    offset: Int,
+    knownTotalCount: Int?
+): VideoRecordPage {
     return withContext(Dispatchers.IO) {
-        runCatching { DataSource.queryVideoRecords(context) }
-            .getOrDefault(emptyList())
+        runCatching {
+            val records = DataSource.queryVideoRecordsPage(
+                context = context,
+                limit = VideoRecordsPageSize + 1,
+                offset = offset
+            )
+            val pageRecords = records.take(VideoRecordsPageSize)
+            val loadedCount = offset + pageRecords.size
+            val totalCount = (knownTotalCount
+                ?: DataSource.queryVideoRecordCount(context)).coerceAtLeast(loadedCount)
+
+            VideoRecordPage(
+                records = pageRecords,
+                totalCount = totalCount,
+                hasMore = records.size > VideoRecordsPageSize || loadedCount < totalCount
+            )
+        }.getOrElse {
+            VideoRecordPage(
+                records = emptyList(),
+                totalCount = offset,
+                hasMore = false
+            )
+        }
     }
 }
 
@@ -1483,6 +1598,12 @@ private data class CoverFrame(
     val width: Dp
 )
 
+private data class VideoRecordPage(
+    val records: List<VideoRecord>,
+    val totalCount: Int,
+    val hasMore: Boolean
+)
+
 private data class AttributeLabel(
     val format: String,
     val value: String
@@ -1520,6 +1641,12 @@ private fun String.formatLocalized(vararg args: Any): String =
     String.format(Locale.getDefault(), this, *args)
 
 private const val AttributeValueMarker = "__MEDIA_CODECAT_ATTRIBUTE_VALUE__"
+
+private const val VideoRecordsPageSize = 30
+
+private const val LoadMorePrefetchItemThreshold = 6
+
+private const val LoadingMoreItemKey = "loading_more"
 
 private val GalleryHeaderContentHeight = 132.dp
 

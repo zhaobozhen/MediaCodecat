@@ -33,6 +33,7 @@ class VideoRecordProvider : ContentProvider() {
         sortOrder: String?
     ): Cursor? {
         val db = database.readableDatabase
+        val limit = uri.limitClause()
         val cursor = when (MATCHER.match(uri)) {
             MATCH_RECORDS -> db.query(
                 VideoRecordContract.Records.TABLE,
@@ -41,7 +42,8 @@ class VideoRecordProvider : ContentProvider() {
                 selectionArgs,
                 null,
                 null,
-                sortOrder ?: DEFAULT_SORT_ORDER
+                sortOrder ?: DEFAULT_SORT_ORDER,
+                limit
             )
 
             MATCH_RECORD -> db.query(
@@ -51,7 +53,8 @@ class VideoRecordProvider : ContentProvider() {
                 arrayOf(requireSessionId(uri)),
                 null,
                 null,
-                sortOrder ?: DEFAULT_SORT_ORDER
+                sortOrder ?: DEFAULT_SORT_ORDER,
+                limit
             )
 
             else -> throw IllegalArgumentException("Unknown URI: $uri")
@@ -169,6 +172,18 @@ class VideoRecordProvider : ContentProvider() {
             } else {
                 "($selection) AND ($REQUIRED_METRICS_SELECTION)"
             }
+        }
+
+        private fun Uri.limitClause(): String? {
+            val rawLimit = getQueryParameter(VideoRecordContract.Records.QUERY_PARAMETER_LIMIT) ?: return null
+            val limit = rawLimit.toIntOrNull()?.takeIf { it > 0 }
+                ?: throw IllegalArgumentException("Invalid record query limit: $rawLimit")
+            val rawOffset = getQueryParameter(VideoRecordContract.Records.QUERY_PARAMETER_OFFSET)
+            val offset = rawOffset?.toIntOrNull()?.takeIf { it >= 0 }
+                ?: if (rawOffset == null) 0
+                else throw IllegalArgumentException("Invalid record query offset: $rawOffset")
+
+            return if (offset > 0) "$limit OFFSET $offset" else limit.toString()
         }
 
         private val MATCHER = UriMatcher(UriMatcher.NO_MATCH).apply {

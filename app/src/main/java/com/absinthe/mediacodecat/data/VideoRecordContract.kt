@@ -27,6 +27,9 @@ object VideoRecordContract {
 
         val CONTENT_URI: Uri = Uri.withAppendedPath(AUTHORITY_URI, PATH)
 
+        const val QUERY_PARAMETER_LIMIT = "limit"
+        const val QUERY_PARAMETER_OFFSET = "offset"
+
         const val CONTENT_TYPE = "vnd.android.cursor.dir/vnd.com.absinthe.mediacodecat.video_record"
         const val CONTENT_ITEM_TYPE = "vnd.android.cursor.item/vnd.com.absinthe.mediacodecat.video_record"
 
