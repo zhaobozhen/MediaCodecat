@@ -1,28 +1,30 @@
 package com.absinthe.mediacodecat
 
+import android.util.Log
 import com.absinthe.mediacodecat.hook.MediaCodecHook
-import com.absinthe.mediacodecat.hook.MediaPlayerHook
-import com.absinthe.mediacodecat.hook.SurfaceViewHook
-import com.highcapable.yukihookapi.YukiHookAPI
-import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
-import com.highcapable.yukihookapi.hook.factory.configs
-import com.highcapable.yukihookapi.hook.log.YLog
-import com.highcapable.yukihookapi.hook.xposed.proxy.IYukiHookXposedInit
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
+import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+import java.util.concurrent.atomic.AtomicBoolean
 
-@InjectYukiHookWithXposed
-object HookEntry : IYukiHookXposedInit {
+class HookEntry : XposedModule() {
+    private val hookInstalled = AtomicBoolean(false)
+    private var processName: String = "unknown"
 
-    override fun onInit() = configs {
-        isDebug = BuildConfig.DEBUG
+    override fun onModuleLoaded(param: ModuleLoadedParam) {
+        processName = param.processName
+        log(Log.INFO, App.TAG, "module loaded, process=$processName")
     }
 
-    override fun onHook() = YukiHookAPI.encase {
-        YLog.debug("onHook: processName=$processName, mainProcessName=$mainProcessName, packageName=$packageName")
-        if (processName == packageName || packageName == "android" || packageName == "com.android.webview"||true) {
-            loadApp(isExcludeSelf = true, MediaCodecHook)
-            //loadApp(isExcludeSelf = true, SurfaceViewHook)
-        }
+    override fun onPackageLoaded(param: PackageLoadedParam) {
+        val packageName = param.packageName
+        if (packageName == BuildConfig.APPLICATION_ID) return
+        if (!param.isFirstPackage || !hookInstalled.compareAndSet(false, true)) return
 
-//        loadApp(isExcludeSelf = true, MediaPlayerHook)
+        MediaCodecHook.install(
+            module = this,
+            packageName = packageName,
+            processName = processName
+        )
     }
 }

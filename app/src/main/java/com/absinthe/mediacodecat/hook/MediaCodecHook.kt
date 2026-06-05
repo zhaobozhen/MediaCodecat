@@ -21,10 +21,10 @@ import com.absinthe.mediacodecat.data.VideoRecordSink
 import com.absinthe.mediacodecat.manager.SurfaceRegistry
 import com.absinthe.mediacodecat.model.FrameEvent
 import com.absinthe.mediacodecat.model.VideoRecord
-import com.highcapable.kavaref.KavaRef.Companion.resolve
-import com.highcapable.yukihookapi.hook.entity.YukiBaseHooker
-import com.highcapable.yukihookapi.hook.log.YLog
+import io.github.libxposed.api.XposedInterface
+import io.github.libxposed.api.XposedModule
 import java.io.ByteArrayOutputStream
+import java.lang.reflect.Method
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -35,7 +35,7 @@ import java.util.Locale
 import kotlin.concurrent.thread
 import kotlin.math.roundToInt
 
-object MediaCodecHook : YukiBaseHooker() {
+object MediaCodecHook {
 
     private const val TAG = "MediaCodecat"
     private const val WINDOW_MS = 1000L
@@ -56,243 +56,335 @@ object MediaCodecHook : YukiBaseHooker() {
     private val sessions = ConcurrentHashMap<Int, CodecSession>()
     private val renderMissingSessionKeys = ConcurrentHashMap.newKeySet<Int>()
     private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+    @Volatile private var xposedModule: XposedModule? = null
 
-    override fun onHook() {
-        loadApp {
-            MediaCodec::class.resolve().apply {
-                firstMethod {
-                    name = "configure"
-                    parameters(
-                        MediaFormat::class,
-                        Surface::class,
-                        MediaCrypto::class,
-                        Class.forName("android.os.IHwBinder"),
-                        Int::class
-                    )
-                }.hook {
-                    after {
-                        val codec = instance<MediaCodec>()
-                        val format = args[0] as? MediaFormat ?: return@after
-                        val mime = format.mime() ?: return@after
+    fun install(module: XposedModule, packageName: String, processName: String) {
+        xposedModule = module
 
-                        closeSession(codec)
+        val codecClass = MediaCodec::class.java
+        val intType = Int::class.javaPrimitiveType!!
+        val longType = Long::class.javaPrimitiveType!!
+        val booleanType = Boolean::class.javaPrimitiveType!!
 
-                        if (!mime.startsWith("video/")) return@after
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod(
+                "configure",
+                MediaFormat::class.java,
+                Surface::class.java,
+                MediaCrypto::class.java,
+                intType
+            ),
+            label = "MediaCodec.configure(public)"
+        ) { chain, _ ->
+            onConfigured(chain, packageName, processName)
+        }
 
-                        val context = currentApplicationContext() ?: run {
-                            YLog.debug("MediaCodecHook: skip video record, app context is null")
-                            return@after
-                        }
-                        val surface = args[1] as? Surface
-                        val session = CodecSession(
-                            codecKey = codec.key(),
-                            sessionId = newSessionId(context, codec),
-                            context = context,
-                            packageName = currentPackageName(context),
-                            processName = currentProcessName(),
-                            codecName = codec.safeName(),
-                            format = MediaFormat(format),
-                            surface = surface,
-                            firstSeenAtMs = System.currentTimeMillis()
-                        )
+        val descramblerClass = optionalClass("android.media.MediaDescrambler")
+        if (descramblerClass != null) {
+            hookAfter(
+                module = module,
+                method = codecClass.optionalMethod(
+                    "configure",
+                    MediaFormat::class.java,
+                    Surface::class.java,
+                    intType,
+                    descramblerClass
+                ),
+                label = "MediaCodec.configure(descrambler)"
+            ) { chain, _ ->
+                onConfigured(chain, packageName, processName)
+            }
+        }
 
-                        sessions[session.codecKey] = session
-                        YLog.info(
-                            "MediaCodecHook: configured video codec=${session.codecName}, " +
-                                "format=$format, surface=$surface, session=${session.sessionId}"
-                        )
+        val iHwBinderClass = optionalClass("android.os.IHwBinder")
+        if (iHwBinderClass != null) {
+            hookAfter(
+                module = module,
+                method = codecClass.optionalMethod(
+                    "configure",
+                    MediaFormat::class.java,
+                    Surface::class.java,
+                    MediaCrypto::class.java,
+                    iHwBinderClass,
+                    intType
+                ),
+                label = "MediaCodec.configure(hidden)"
+            ) { chain, _ ->
+                onConfigured(chain, packageName, processName)
+            }
+        }
 
-                        publishRecord(session)
-                        updateSurfaceContent(session)
-                        startBackgroundWorker(session)
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("setOutputSurface", Surface::class.java),
+            label = "MediaCodec.setOutputSurface"
+        ) { chain, _ ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            val surface = chain.getArg(0) as? Surface
+            val session = sessions[codec.key()] ?: return@hookAfter
 
-                firstMethod {
-                    name = "setOutputSurface"
-                    parameters(Surface::class)
-                }.hook {
-                    after {
-                        val codec = instance<MediaCodec>()
-                        val surface = args[0] as? Surface
-                        val session = sessions[codec.key()] ?: return@after
+            session.surface = surface
+            session.surfaceId = surface?.stableId()
+            session.lastSeenAtMs = System.currentTimeMillis()
 
-                        session.surface = surface
-                        session.surfaceId = surface?.stableId()
-                        session.lastSeenAtMs = System.currentTimeMillis()
+            publishRecord(session)
+            updateSurfaceContent(session)
+        }
 
-                        publishRecord(session)
-                        updateSurfaceContent(session)
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("start"),
+            label = "MediaCodec.start"
+        ) { chain, _ ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            refreshCodecFormats(codec, "start")
+        }
 
-                firstMethod {
-                    name = "start"
-                    emptyParameters()
-                }.hook {
-                    after {
-                        val codec = instance<MediaCodec>()
-                        refreshCodecFormats(codec, "start")
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("getInputFormat"),
+            label = "MediaCodec.getInputFormat"
+        ) { chain, result ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            val format = result as? MediaFormat ?: return@hookAfter
+            mergeCodecFormat(codec, format, "getInputFormat")
+        }
 
-                firstMethod {
-                    name = "getInputFormat"
-                    emptyParameters()
-                }.hook {
-                    after {
-                        val codec = instance<MediaCodec>()
-                        val format = result as? MediaFormat ?: return@after
-                        mergeCodecFormat(codec, format, "getInputFormat")
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("getOutputFormat"),
+            label = "MediaCodec.getOutputFormat"
+        ) { chain, result ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            val format = result as? MediaFormat ?: return@hookAfter
+            mergeCodecFormat(codec, format, "getOutputFormat")
+        }
 
-                firstMethod {
-                    name = "getOutputFormat"
-                    emptyParameters()
-                }.hook {
-                    after {
-                        val codec = instance<MediaCodec>()
-                        val format = result as? MediaFormat ?: return@after
-                        mergeCodecFormat(codec, format, "getOutputFormat")
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("getOutputFormat", intType),
+            label = "MediaCodec.getOutputFormat(index)"
+        ) { chain, result ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            val format = result as? MediaFormat ?: return@hookAfter
+            mergeCodecFormat(codec, format, "getOutputFormat(index)")
+        }
 
-                firstMethod {
-                    name = "getOutputFormat"
-                    parameters(Int::class)
-                }.hook {
-                    after {
-                        val codec = instance<MediaCodec>()
-                        val format = result as? MediaFormat ?: return@after
-                        mergeCodecFormat(codec, format, "getOutputFormat(index)")
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("queueInputBuffer", intType, intType, intType, longType, intType),
+            label = "MediaCodec.queueInputBuffer"
+        ) { chain, _ ->
+            val size = chain.getArg(2) as? Int ?: return@hookAfter
+            if (size <= 0) return@hookAfter
+            val presentationTimeUs = chain.getArg(3) as? Long
 
-                firstMethod {
-                    name = "queueInputBuffer"
-                    parameters(
-                        Int::class,
-                        Int::class,
-                        Int::class,
-                        Long::class,
-                        Int::class
-                    )
-                }.hook {
-                    after {
-                        val size = args[2] as Int
-                        if (size <= 0) return@after
-                        val presentationTimeUs = args[3] as? Long
+            sessions[(chain.getThisObject() as? MediaCodec)?.key()]?.let { session ->
+                val frameCount = session.offerInput(size, presentationTimeUs)
+                maybeCaptureCover(session, frameCount, "queueInputBuffer")
+            }
+        }
 
-                        sessions[instance<MediaCodec>().key()]?.let { session ->
-                            val frameCount = session.offerInput(size, presentationTimeUs)
-                            maybeCaptureCover(session, frameCount, "queueInputBuffer")
-                        }
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod(
+                "queueSecureInputBuffer",
+                intType,
+                intType,
+                MediaCodec.CryptoInfo::class.java,
+                longType,
+                intType
+            ),
+            label = "MediaCodec.queueSecureInputBuffer"
+        ) { chain, _ ->
+            val size = (chain.getArg(2) as? MediaCodec.CryptoInfo)?.totalBytes() ?: 0
+            if (size <= 0) return@hookAfter
+            val presentationTimeUs = chain.getArg(3) as? Long
 
-                firstMethod {
-                    name = "queueSecureInputBuffer"
-                    parameters(
-                        Int::class,
-                        Int::class,
-                        MediaCodec.CryptoInfo::class,
-                        Long::class,
-                        Int::class
-                    )
-                }.hook {
-                    after {
-                        val size = (args[2] as? MediaCodec.CryptoInfo)?.totalBytes() ?: 0
-                        if (size <= 0) return@after
-                        val presentationTimeUs = args[3] as? Long
+            sessions[(chain.getThisObject() as? MediaCodec)?.key()]?.let { session ->
+                val frameCount = session.offerInput(size, presentationTimeUs)
+                maybeCaptureCover(session, frameCount, "queueSecureInputBuffer")
+            }
+        }
 
-                        sessions[instance<MediaCodec>().key()]?.let { session ->
-                            val frameCount = session.offerInput(size, presentationTimeUs)
-                            maybeCaptureCover(session, frameCount, "queueSecureInputBuffer")
-                        }
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("dequeueOutputBuffer", MediaCodec.BufferInfo::class.java, longType),
+            label = "MediaCodec.dequeueOutputBuffer"
+        ) { chain, result ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            if (result as? Int == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                refreshCodecFormats(codec, "dequeueOutputBuffer(format-changed)")
+            }
+        }
 
-                firstMethod {
-                    name = "dequeueOutputBuffer"
-                    parameters(MediaCodec.BufferInfo::class, Long::class)
-                }.hook {
-                    after {
-                        val codec = instance<MediaCodec>()
-                        when (result as? Int) {
-                            MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> refreshCodecFormats(
-                                codec,
-                                "dequeueOutputBuffer(format-changed)"
-                            )
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("releaseOutputBuffer", intType, booleanType),
+            label = "MediaCodec.releaseOutputBuffer(render)"
+        ) { chain, _ ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            val render = chain.getArg(1) as? Boolean ?: return@hookAfter
+            onReleasedOutputBuffer(codec, render, "releaseOutputBuffer(render)")
+        }
 
-                            null -> Unit
-                            else -> Unit
-                        }
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("releaseOutputBuffer", intType, longType),
+            label = "MediaCodec.releaseOutputBuffer(timestamp)"
+        ) { chain, _ ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            onRenderedFrame(codec, "releaseOutputBuffer(timestamp)")
+        }
 
-                firstMethod {
-                    name = "releaseOutputBuffer"
-                    parameters(Int::class, Boolean::class)
-                }.hook {
-                    after {
-                        val render = args[1] as? Boolean ?: return@after
-                        onReleasedOutputBuffer(instance<MediaCodec>(), render, "releaseOutputBuffer(render)")
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("releaseOutputBufferInternal", intType, booleanType, booleanType, longType),
+            label = "MediaCodec.releaseOutputBufferInternal"
+        ) { chain, _ ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            val render = chain.getArg(1) as? Boolean ?: return@hookAfter
+            onReleasedOutputBuffer(codec, render, "releaseOutputBufferInternal")
+        }
 
-                firstMethod {
-                    name = "releaseOutputBuffer"
-                    parameters(Int::class, Long::class)
-                }.hook {
-                    after {
-                        onRenderedFrame(instance<MediaCodec>(), "releaseOutputBuffer(timestamp)")
-                    }
-                }
+        hookAfter(
+            module = module,
+            method = codecClass.optionalMethod("releaseOutputBuffer", intType, booleanType, booleanType, longType),
+            label = "MediaCodec.releaseOutputBuffer(native)"
+        ) { chain, _ ->
+            val codec = chain.getThisObject() as? MediaCodec ?: return@hookAfter
+            val render = chain.getArg(1) as? Boolean ?: return@hookAfter
+            onReleasedOutputBuffer(codec, render, "releaseOutputBuffer(native)")
+        }
 
-                firstMethod {
-                    name = "releaseOutputBufferInternal"
-                    parameters(Int::class, Boolean::class, Boolean::class, Long::class)
-                }.hook {
-                    after {
-                        val render = args[1] as? Boolean ?: return@after
-                        onReleasedOutputBuffer(instance<MediaCodec>(), render, "releaseOutputBufferInternal")
-                    }
-                }
+        hookBefore(module, codecClass.optionalMethod("stop"), "MediaCodec.stop") { chain ->
+            (chain.getThisObject() as? MediaCodec)?.let(::closeSession)
+        }
+        hookBefore(module, codecClass.optionalMethod("reset"), "MediaCodec.reset") { chain ->
+            (chain.getThisObject() as? MediaCodec)?.let(::closeSession)
+        }
+        hookBefore(module, codecClass.optionalMethod("release"), "MediaCodec.release") { chain ->
+            (chain.getThisObject() as? MediaCodec)?.let(::closeSession)
+        }
 
-                firstMethod {
-                    name = "releaseOutputBuffer"
-                    parameters(Int::class, Boolean::class, Boolean::class, Long::class)
-                }.hook {
-                    after {
-                        val render = args[1] as? Boolean ?: return@after
-                        onReleasedOutputBuffer(instance<MediaCodec>(), render, "releaseOutputBuffer(native)")
-                    }
-                }
+        logInfo("MediaCodecHook: installed, package=$packageName, process=$processName")
+    }
 
-                firstMethod {
-                    name = "stop"
-                }.hook {
-                    before {
-                        closeSession(instance<MediaCodec>())
-                    }
-                }
+    private fun onConfigured(chain: XposedInterface.Chain, packageName: String, processName: String) {
+        val codec = chain.getThisObject() as? MediaCodec ?: return
+        val format = chain.getArg(0) as? MediaFormat ?: return
+        val mime = format.mime() ?: return
 
-                firstMethod {
-                    name = "reset"
-                }.hook {
-                    before {
-                        closeSession(instance<MediaCodec>())
-                    }
-                }
+        closeSession(codec)
 
-                firstMethod {
-                    name = "release"
-                }.hook {
-                    before {
-                        closeSession(instance<MediaCodec>())
-                    }
-                }
+        if (!mime.startsWith("video/")) return
+
+        val context = currentApplicationContext() ?: run {
+            logDebug("MediaCodecHook: skip video record, app context is null")
+            return
+        }
+        val surface = chain.getArg(1) as? Surface
+        val session = CodecSession(
+            codecKey = codec.key(),
+            sessionId = newSessionId(context, codec),
+            context = context,
+            packageName = currentPackageName(context, packageName),
+            processName = currentProcessName(processName),
+            codecName = codec.safeName(),
+            format = MediaFormat(format),
+            surface = surface,
+            firstSeenAtMs = System.currentTimeMillis()
+        )
+
+        sessions[session.codecKey] = session
+        logInfo(
+            "MediaCodecHook: configured video codec=${session.codecName}, " +
+                "format=$format, surface=$surface, session=${session.sessionId}"
+        )
+
+        publishRecord(session)
+        updateSurfaceContent(session)
+        startBackgroundWorker(session)
+    }
+
+    private fun hookAfter(
+        module: XposedModule,
+        method: Method?,
+        label: String,
+        onAfter: (XposedInterface.Chain, Any?) -> Unit
+    ) {
+        hookMethod(module, method, label) { chain ->
+            val result = chain.proceed()
+            onAfter(chain, result)
+            result
+        }
+    }
+
+    private fun hookBefore(
+        module: XposedModule,
+        method: Method?,
+        label: String,
+        onBefore: (XposedInterface.Chain) -> Unit
+    ) {
+        hookMethod(module, method, label) { chain ->
+            onBefore(chain)
+            chain.proceed()
+        }
+    }
+
+    private fun hookMethod(
+        module: XposedModule,
+        method: Method?,
+        label: String,
+        intercept: (XposedInterface.Chain) -> Any?
+    ) {
+        if (method == null) {
+            logDebug("MediaCodecHook: skip missing method $label")
+            return
+        }
+        runCatching {
+            module.hook(method)
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept(XposedInterface.Hooker { chain -> intercept(chain) })
+        }.onFailure {
+            logWarn("MediaCodecHook: failed to hook $label", it)
+        }
+    }
+
+    private fun Class<*>.optionalMethod(name: String, vararg parameterTypes: Class<*>): Method? {
+        return runCatching {
+            getDeclaredMethod(name, *parameterTypes).apply { isAccessible = true }
+        }.getOrNull()
+    }
+
+    private fun optionalClass(name: String): Class<*>? {
+        return runCatching { Class.forName(name) }.getOrNull()
+    }
+
+    private fun logDebug(message: String, throwable: Throwable? = null) {
+        log(Log.DEBUG, message, throwable)
+    }
+
+    private fun logInfo(message: String, throwable: Throwable? = null) {
+        log(Log.INFO, message, throwable)
+    }
+
+    private fun logWarn(message: String, throwable: Throwable? = null) {
+        log(Log.WARN, message, throwable)
+    }
+
+    private fun log(priority: Int, message: String, throwable: Throwable? = null) {
+        if (throwable == null) {
+            Log.println(priority, TAG, message)
+        } else {
+            Log.println(priority, TAG, "$message\n${Log.getStackTraceString(throwable)}")
+        }
+        runCatching {
+            if (throwable == null) {
+                xposedModule?.log(priority, TAG, message)
+            } else {
+                xposedModule?.log(priority, TAG, message, throwable)
             }
         }
     }
@@ -385,7 +477,7 @@ object MediaCodecHook : YukiBaseHooker() {
 
             publishRecord(session)
             updateSurfaceContent(session)
-            YLog.debug("CodecRateWorker: stop, session=${session.sessionId}")
+            logDebug("CodecRateWorker: stop, session=${session.sessionId}")
         }
     }
 
@@ -415,7 +507,7 @@ object MediaCodecHook : YukiBaseHooker() {
 
         session.mergeFormat(format)
         session.lastSeenAtMs = System.currentTimeMillis()
-        YLog.debug(
+        logDebug(
             "MediaCodecHook: merged $source format, session=${session.sessionId}, format=$format"
         )
         publishRecord(session)
@@ -426,7 +518,7 @@ object MediaCodecHook : YukiBaseHooker() {
         if (!VideoRecordSink.upsert(session.context, session.toRecord()) &&
             session.persistFailureLogged.compareAndSet(false, true)
         ) {
-            YLog.debug("MediaCodecHook: failed to persist video record, session=${session.sessionId}")
+            logDebug("MediaCodecHook: failed to persist video record, session=${session.sessionId}")
         }
     }
 
@@ -450,14 +542,13 @@ object MediaCodecHook : YukiBaseHooker() {
         val codecKey = codec.key()
         val session = sessions[codecKey] ?: run {
             if (renderMissingSessionKeys.add(codecKey)) {
-                Log.d(TAG, "MediaCodecHook: rendered frame has no video session, source=$source, codecKey=$codecKey")
+                logDebug("MediaCodecHook: rendered frame has no video session, source=$source, codecKey=$codecKey")
             }
             return
         }
         val frameCount = session.offerRenderedFrame()
         if (session.coverFrameLogged.compareAndSet(false, true)) {
-            Log.d(
-                TAG,
+            logDebug(
                 "MediaCodecHook: rendered video frame source=$source, " +
                     "surface=${session.surface}, session=${session.sessionId}"
             )
@@ -474,8 +565,7 @@ object MediaCodecHook : YukiBaseHooker() {
         sessions[codec.key()]?.let { session ->
             val frameCount = session.offerNonRenderedOutput()
             if (session.coverNonRenderLogged.compareAndSet(false, true)) {
-                Log.d(
-                    TAG,
+                logDebug(
                     "MediaCodecHook: non-render output release source=$source, " +
                         "session=${session.sessionId}"
                 )
@@ -547,9 +637,8 @@ object MediaCodecHook : YukiBaseHooker() {
     private fun cancelCoverCapture(session: CodecSession, reason: String) {
         session.coverCaptureInFlight.set(false)
         if (session.coverSkipLogged.compareAndSet(false, true)) {
-            Log.d(TAG, "MediaCodecHook: cover capture skipped, session=${session.sessionId}, $reason")
+            logDebug("MediaCodecHook: cover capture skipped, session=${session.sessionId}, $reason")
         }
-        YLog.debug("MediaCodecHook: cover capture skipped, session=${session.sessionId}, $reason")
     }
 
     private fun handleCoverCopyResult(session: CodecSession, bitmap: Bitmap, result: Int, source: String) {
@@ -601,12 +690,10 @@ object MediaCodecHook : YukiBaseHooker() {
             session.coverAttempts.incrementAndGet()
         }
         session.coverCaptureInFlight.set(false)
-        Log.d(
-            TAG,
+        logDebug(
             "MediaCodecHook: cover capture ${if (success) "success" else "retry"}, " +
                 "session=${session.sessionId}, $reason"
         )
-        YLog.debug("MediaCodecHook: cover capture ${if (success) "success" else "retry"}, session=${session.sessionId}, $reason")
     }
 
     private fun closeSession(codec: MediaCodec) {
@@ -734,7 +821,7 @@ object MediaCodecHook : YukiBaseHooker() {
                     else -> Unit
                 }
             }.onFailure {
-                YLog.debug("MediaCodecHook: skip format key=$key while merging", it)
+                logDebug("MediaCodecHook: skip format key=$key while merging", it)
             }
         }
         return merged
@@ -794,34 +881,21 @@ object MediaCodecHook : YukiBaseHooker() {
     }
 
     private fun currentApplicationContext(): Context? {
-        val xposedApplication = runCatching {
-            Class.forName("android.app.AndroidAppHelper")
-                .getDeclaredMethod("currentApplication")
-                .invoke(null) as? Application
-        }.getOrNull()
         val activityThreadApplication = runCatching {
             Class.forName("android.app.ActivityThread")
                 .getDeclaredMethod("currentApplication")
                 .invoke(null) as? Application
         }.getOrNull()
 
-        return (xposedApplication ?: activityThreadApplication)?.applicationContext
+        return activityThreadApplication?.applicationContext
     }
 
-    private fun currentPackageName(context: Context): String {
-        return runCatching {
-            Class.forName("android.app.AndroidAppHelper")
-                .getDeclaredMethod("currentPackageName")
-                .invoke(null) as? String
-        }.getOrNull()?.takeIf { it.isNotBlank() } ?: context.packageName
+    private fun currentPackageName(context: Context, fallbackPackageName: String): String {
+        return fallbackPackageName.takeIf { it.isNotBlank() } ?: context.packageName
     }
 
-    private fun currentProcessName(): String {
-        return runCatching {
-            Class.forName("android.app.AndroidAppHelper")
-                .getDeclaredMethod("currentProcessName")
-                .invoke(null) as? String
-        }.getOrNull()?.takeIf { it.isNotBlank() }
+    private fun currentProcessName(fallbackProcessName: String): String {
+        return fallbackProcessName.takeIf { it.isNotBlank() && it != "unknown" }
             ?: Application.getProcessName().takeIf { it.isNotBlank() }
             ?: "unknown"
     }

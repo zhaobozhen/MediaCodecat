@@ -5,10 +5,11 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import com.highcapable.yukihookapi.hook.log.YLog
+import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
 object SurfaceRegistry {
+    private const val TAG = "MediaCodecat"
     private val map = ConcurrentHashMap<Surface, Item>()
 
     fun hasSurface(surface: Surface) = map.keys.contains(surface)
@@ -30,15 +31,15 @@ object SurfaceRegistry {
 
     fun addTextViewToAll(view: TextView) {
         map.keys.forEach {
-            YLog.debug("addTextViewToAll: $it")
+            Log.d(TAG, "SurfaceRegistry: addTextViewToAll, surface=$it")
             addTextView(it, view)
         }
     }
 
     fun addContent(surface: Surface, content: String) {
-        YLog.debug("SurfaceRegistry: addContent, surface=$surface, content=$content")
+        Log.d(TAG, "SurfaceRegistry: addContent, surface=$surface, content=$content")
         map.getOrPut(surface) { Item(content = content) }.content = content
-        YLog.debug("SurfaceRegistry: content=${map[surface]?.content}")
+        Log.d(TAG, "SurfaceRegistry: content=${map[surface]?.content}")
 
     }
 

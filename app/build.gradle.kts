@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.ksp)
 }
 
 android {
@@ -56,11 +55,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons)
 
-    compileOnly(libs.rovo89.xposed.api)
-    implementation(libs.yukihookapi)
-    implementation(libs.kavaref.core)
-    implementation(libs.kavaref.extension)
-    ksp(libs.yukihookapi.ksp.xposed)
+    compileOnly(libs.libxposed.api)
     implementation(libs.backdrop)
     implementation(libs.capsule)
 

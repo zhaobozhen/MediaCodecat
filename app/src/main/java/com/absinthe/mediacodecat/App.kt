@@ -1,14 +1,8 @@
 package com.absinthe.mediacodecat
 
-import com.highcapable.yukihookapi.hook.log.YLog
-import com.highcapable.yukihookapi.hook.xposed.application.ModuleApplication
+import android.app.Application
 
-class App: ModuleApplication() {
-    override fun onCreate() {
-        super.onCreate()
-        YLog.Configs.tag = TAG
-    }
-
+class App : Application() {
     companion object {
         const val TAG = "MediaCodecat"
     }

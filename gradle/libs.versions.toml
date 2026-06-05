@@ -1,17 +1,13 @@
 [versions]
 agp = "9.2.1"
 kotlin = "2.4.0"
-ksp = "2.3.9"
 coreKtx = "1.19.0"
 lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.13.0"
 composeBom = "2026.05.01"
 material-icons = "1.7.8"
 nav3Core = "1.1.2"
-rovo89-xposed-api = "82"
-yukihookapi = "1.3.2"
-kavaref-core = "1.0.3"
-kavaref-extension = "1.0.3"
+libxposed-api = "101.0.1"
 backdrop = "2.0.0"
 capsule = "2.1.3"
 
@@ -30,15 +26,10 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-core-android", version.ref = "material-icons" }
-rovo89-xposed-api = { group = "de.robv.android.xposed", name = "api", version.ref = "rovo89-xposed-api" }
-yukihookapi = { group = "com.highcapable.yukihookapi", name = "api", version.ref = "yukihookapi" }
-yukihookapi-ksp-xposed = { group = "com.highcapable.yukihookapi", name = "ksp-xposed", version.ref = "yukihookapi" }
-kavaref-core = { group = "com.highcapable.kavaref", name = "kavaref-core", version.ref = "kavaref-core" }
-kavaref-extension = { group = "com.highcapable.kavaref", name = "kavaref-extension", version.ref = "kavaref-extension" }
+libxposed-api = { group = "io.github.libxposed", name = "api", version.ref = "libxposed-api" }
 backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }
 capsule =  { group = "io.github.kyant0", name = "capsule", version.ref = "capsule" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
