@@ -15,6 +15,7 @@ class VideoRecordProvider : ContentProvider() {
     override fun onCreate(): Boolean {
         val appContext = context?.applicationContext ?: return false
         database = VideoRecordDatabase(appContext)
+        pruneIncompleteRecords()
         return true
     }
 
@@ -36,7 +37,7 @@ class VideoRecordProvider : ContentProvider() {
             MATCH_RECORDS -> db.query(
                 VideoRecordContract.Records.TABLE,
                 projection,
-                selection,
+                requiredMetricsSelection(selection),
                 selectionArgs,
                 null,
                 null,
@@ -46,7 +47,7 @@ class VideoRecordProvider : ContentProvider() {
             MATCH_RECORD -> db.query(
                 VideoRecordContract.Records.TABLE,
                 projection,
-                "${VideoRecordContract.Records.SESSION_ID} = ?",
+                requiredMetricsSelection("${VideoRecordContract.Records.SESSION_ID} = ?"),
                 arrayOf(requireSessionId(uri)),
                 null,
                 null,
@@ -65,6 +66,8 @@ class VideoRecordProvider : ContentProvider() {
         }
 
         val record = VideoRecord.fromContentValues(requireNotNull(values))
+        if (!record.hasRequiredMetrics()) return null
+
         upsert(record)
         return notifyAndBuildRecordUri(record.sessionId)
     }
@@ -86,6 +89,8 @@ class VideoRecordProvider : ContentProvider() {
 
             else -> throw IllegalArgumentException("Unknown URI: $uri")
         }
+
+        if (!record.hasRequiredMetrics()) return 0
 
         upsert(record)
         notify(uri)
@@ -117,6 +122,14 @@ class VideoRecordProvider : ContentProvider() {
         )
     }
 
+    private fun pruneIncompleteRecords() {
+        database.writableDatabase.delete(
+            VideoRecordContract.Records.TABLE,
+            INCOMPLETE_METRICS_SELECTION,
+            null
+        )
+    }
+
     private fun notifyAndBuildRecordUri(sessionId: String): Uri {
         val uri = VideoRecordContract.Records.CONTENT_URI.buildUpon()
             .appendPath(sessionId)
@@ -140,6 +153,23 @@ class VideoRecordProvider : ContentProvider() {
 
         private const val DEFAULT_SORT_ORDER =
             "${VideoRecordContract.Records.LAST_SEEN_AT_MS} DESC"
+
+        private const val REQUIRED_METRICS_SELECTION =
+            "${VideoRecordContract.Records.BITRATE_KBPS} > 0 AND ${VideoRecordContract.Records.FRAME_RATE} > 0"
+
+        private const val INCOMPLETE_METRICS_SELECTION =
+            "${VideoRecordContract.Records.BITRATE_KBPS} IS NULL OR " +
+                "${VideoRecordContract.Records.BITRATE_KBPS} <= 0 OR " +
+                "${VideoRecordContract.Records.FRAME_RATE} IS NULL OR " +
+                "${VideoRecordContract.Records.FRAME_RATE} <= 0"
+
+        private fun requiredMetricsSelection(selection: String?): String {
+            return if (selection.isNullOrBlank()) {
+                REQUIRED_METRICS_SELECTION
+            } else {
+                "($selection) AND ($REQUIRED_METRICS_SELECTION)"
+            }
+        }
 
         private val MATCHER = UriMatcher(UriMatcher.NO_MATCH).apply {
             addURI(VideoRecordContract.AUTHORITY, VideoRecordContract.Records.PATH, MATCH_RECORDS)

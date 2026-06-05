@@ -25,7 +25,11 @@ class VideoRecordReceiver : BroadcastReceiver() {
 
         runCatching {
             context.contentResolver.insert(VideoRecordContract.Records.CONTENT_URI, values)
-        }.onSuccess {
+        }.onSuccess { uri ->
+            if (uri == null) {
+                Log.d(TAG, "Skipped incomplete video record via receiver, session=$sessionId")
+                return@onSuccess
+            }
             if (loggedSessions.add(sessionId)) {
                 Log.d(TAG, "Persisted video record via receiver, session=$sessionId")
             }

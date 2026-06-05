@@ -2,8 +2,10 @@ package com.absinthe.mediacodecat.model
 
 import android.content.ContentValues
 import android.database.Cursor
+import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaFormat
 import com.absinthe.mediacodecat.data.VideoRecordContract
+import java.util.Locale
 import org.json.JSONObject
 
 data class VideoRecord(
@@ -29,6 +31,11 @@ data class VideoRecord(
     val firstSeenAtMs: Long,
     val lastSeenAtMs: Long
 ) {
+
+    fun hasRequiredMetrics(): Boolean {
+        return bitrateKbps?.let { it > 0 } == true &&
+            frameRate?.let { it.isFinite() && it > 0f } == true
+    }
 
     fun toContentValues(): ContentValues = ContentValues().apply {
         put(VideoRecordContract.Records.SCHEMA_VERSION, schemaVersion)
@@ -75,13 +82,19 @@ data class VideoRecord(
                 ?: format.optBitrateKbps(MediaFormat.KEY_BIT_RATE)
             val recordFrameRate = format.optPositiveFloat(MediaFormat.KEY_FRAME_RATE)
                 ?: estimatedFrameRate.validFrameRate()
+            val mime = format.optString(MediaFormat.KEY_MIME).orEmpty()
+            val codecProfileLevel = format.codecProfileLevel(mime)
+            val recordProfile = codecProfileLevel?.first
+                ?: format.optCodecProfileInt(mime, MediaFormat.KEY_PROFILE)
+            val recordLevel = codecProfileLevel?.second
+                ?: format.optCodecProfileInt(mime, MediaFormat.KEY_LEVEL)
 
             return VideoRecord(
                 sessionId = sessionId,
                 packageName = packageName,
                 processName = processName,
                 codecName = codecName,
-                mime = format.optString(MediaFormat.KEY_MIME).orEmpty(),
+                mime = mime,
                 width = displaySize?.first,
                 height = displaySize?.second,
                 frameRate = recordFrameRate,
@@ -90,8 +103,8 @@ data class VideoRecord(
                 colorStandard = format.optPositiveInt(MediaFormat.KEY_COLOR_STANDARD),
                 colorRange = format.optPositiveInt(MediaFormat.KEY_COLOR_RANGE),
                 colorTransfer = format.optPositiveInt(MediaFormat.KEY_COLOR_TRANSFER),
-                profile = format.optPositiveInt(MediaFormat.KEY_PROFILE),
-                level = format.optPositiveInt(MediaFormat.KEY_LEVEL),
+                profile = recordProfile,
+                level = recordLevel,
                 bitrateKbps = recordBitrateKbps,
                 surfaceId = surfaceId,
                 mediaFormat = format.toStableJson(
@@ -163,7 +176,14 @@ data class VideoRecord(
 
         private fun MediaFormat.optPositiveInt(key: String): Int? = optInt(key).validPositive()
 
+        private fun MediaFormat.optCodecProfileInt(mime: String, key: String): Int? {
+            if (mime.normalizedMime() == MediaFormat.MIMETYPE_VIDEO_RAW) return null
+            return optPositiveInt(key)
+        }
+
         private fun Int?.validPositive(): Int? = takeIf { it != null && it > 0 }
+
+        private fun String.normalizedMime(): String = substringBefore(';').trim().lowercase(Locale.ROOT)
 
         private fun MediaFormat.optFloat(key: String): Float? = runCatching {
             if (containsKey(key)) getNumber(key)?.toFloat() else null
@@ -182,6 +202,135 @@ data class VideoRecord(
         private fun MediaFormat.optBitrateKbps(key: String): Int? {
             val bps = optLong(key)?.takeIf { it > 0 } ?: return null
             return (bps / 1000L).coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+
+        private fun MediaFormat.codecProfileLevel(mime: String): Pair<Int?, Int?>? {
+            return when (mime.normalizedMime()) {
+                MediaFormat.MIMETYPE_VIDEO_AVC -> avcProfileLevelFromCsd()
+                else -> null
+            }
+        }
+
+        private fun MediaFormat.avcProfileLevelFromCsd(): Pair<Int?, Int?>? {
+            val bytes = optByteBufferBytes("csd-0") ?: return null
+            val header = avcSpsHeader(bytes) ?: return null
+            val profile = avcProfileFromIdc(header.profileIdc, header.constraints)
+            val level = avcLevelFromIdc(header.levelIdc, header.constraints)
+            return if (profile != null || level != null) profile to level else null
+        }
+
+        private fun MediaFormat.optByteBufferBytes(key: String): ByteArray? = runCatching {
+            if (!containsKey(key)) return@runCatching null
+            val buffer = getByteBuffer(key)?.duplicate() ?: return@runCatching null
+            ByteArray(buffer.remaining()).also(buffer::get)
+        }.getOrNull()
+
+        private fun avcSpsHeader(bytes: ByteArray): AvcSpsHeader? {
+            if (bytes.size >= 4 && bytes[0].unsigned() == 1) {
+                return AvcSpsHeader(
+                    profileIdc = bytes[1].unsigned(),
+                    constraints = bytes[2].unsigned(),
+                    levelIdc = bytes[3].unsigned()
+                )
+            }
+
+            val spsPayloadOffset = bytes.avcSpsPayloadOffset() ?: return null
+            if (spsPayloadOffset + 2 >= bytes.size) return null
+            return AvcSpsHeader(
+                profileIdc = bytes[spsPayloadOffset].unsigned(),
+                constraints = bytes[spsPayloadOffset + 1].unsigned(),
+                levelIdc = bytes[spsPayloadOffset + 2].unsigned()
+            )
+        }
+
+        private fun ByteArray.avcSpsPayloadOffset(): Int? {
+            var index = 0
+            while (index < size - 4) {
+                val startCodeLength = startCodeLengthAt(index)
+                if (startCodeLength > 0) {
+                    val nalOffset = index + startCodeLength
+                    if (nalOffset < size && (this[nalOffset].unsigned() and 0x1F) == 7) {
+                        return nalOffset + 1
+                    }
+                    index = nalOffset
+                } else {
+                    index++
+                }
+            }
+            return if (isNotEmpty() && (this[0].unsigned() and 0x1F) == 7) 1 else null
+        }
+
+        private fun ByteArray.startCodeLengthAt(index: Int): Int {
+            return when {
+                index + 3 < size &&
+                    this[index].unsigned() == 0 &&
+                    this[index + 1].unsigned() == 0 &&
+                    this[index + 2].unsigned() == 0 &&
+                    this[index + 3].unsigned() == 1 -> 4
+
+                index + 2 < size &&
+                    this[index].unsigned() == 0 &&
+                    this[index + 1].unsigned() == 0 &&
+                    this[index + 2].unsigned() == 1 -> 3
+
+                else -> 0
+            }
+        }
+
+        private fun Byte.unsigned(): Int = toInt() and 0xFF
+
+        private fun avcProfileFromIdc(profileIdc: Int, constraints: Int): Int? {
+            return when (profileIdc) {
+                66 -> if ((constraints and 0x40) != 0) {
+                    CodecProfileLevel.AVCProfileConstrainedBaseline
+                } else {
+                    CodecProfileLevel.AVCProfileBaseline
+                }
+
+                77 -> CodecProfileLevel.AVCProfileMain
+                88 -> CodecProfileLevel.AVCProfileExtended
+                100 -> if ((constraints and 0x0C) == 0x0C) {
+                    CodecProfileLevel.AVCProfileConstrainedHigh
+                } else {
+                    CodecProfileLevel.AVCProfileHigh
+                }
+
+                110 -> CodecProfileLevel.AVCProfileHigh10
+                122 -> CodecProfileLevel.AVCProfileHigh422
+                244 -> CodecProfileLevel.AVCProfileHigh444
+                else -> null
+            }
+        }
+
+        private fun avcLevelFromIdc(levelIdc: Int, constraints: Int): Int? {
+            return when (levelIdc) {
+                9 -> CodecProfileLevel.AVCLevel1b
+                10 -> CodecProfileLevel.AVCLevel1
+                11 -> if ((constraints and 0x10) != 0) {
+                    CodecProfileLevel.AVCLevel1b
+                } else {
+                    CodecProfileLevel.AVCLevel11
+                }
+
+                12 -> CodecProfileLevel.AVCLevel12
+                13 -> CodecProfileLevel.AVCLevel13
+                20 -> CodecProfileLevel.AVCLevel2
+                21 -> CodecProfileLevel.AVCLevel21
+                22 -> CodecProfileLevel.AVCLevel22
+                30 -> CodecProfileLevel.AVCLevel3
+                31 -> CodecProfileLevel.AVCLevel31
+                32 -> CodecProfileLevel.AVCLevel32
+                40 -> CodecProfileLevel.AVCLevel4
+                41 -> CodecProfileLevel.AVCLevel41
+                42 -> CodecProfileLevel.AVCLevel42
+                50 -> CodecProfileLevel.AVCLevel5
+                51 -> CodecProfileLevel.AVCLevel51
+                52 -> CodecProfileLevel.AVCLevel52
+                60 -> CodecProfileLevel.AVCLevel6
+                61 -> CodecProfileLevel.AVCLevel61
+                62 -> CodecProfileLevel.AVCLevel62
+                else -> null
+            }
         }
 
         private fun MediaFormat.optRotationDegrees(): Int? {
@@ -264,6 +413,12 @@ data class VideoRecord(
             val index = getColumnIndex(column)
             return if (index >= 0 && !isNull(index)) getFloat(index) else null
         }
+
+        private data class AvcSpsHeader(
+            val profileIdc: Int,
+            val constraints: Int,
+            val levelIdc: Int
+        )
 
         private const val CROP_LEFT = "crop-left"
         private const val CROP_RIGHT = "crop-right"

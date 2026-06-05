@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 object VideoRecordSink {
     fun upsert(context: Context, record: VideoRecord): Boolean {
+        if (!record.hasRequiredMetrics()) return true
+
         if (!useBroadcastFallback.get()) {
             val providerResult = tryProviderUpsert(context, record)
             if (providerResult.getOrDefault(false)) return true

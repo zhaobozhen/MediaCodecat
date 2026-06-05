@@ -51,6 +51,12 @@ object MediaCodecHook {
     private const val CROP_TOP = "crop-top"
     private const val CROP_BOTTOM = "crop-bottom"
 
+    private val RAW_OUTPUT_CODEC_METADATA_KEYS = setOf(
+        MediaFormat.KEY_MIME,
+        MediaFormat.KEY_PROFILE,
+        MediaFormat.KEY_LEVEL
+    )
+
     private val COVER_FRAME_THRESHOLDS = intArrayOf(12, 30, 60)
 
     private val sessions = ConcurrentHashMap<Int, CodecSession>()
@@ -763,8 +769,12 @@ object MediaCodecHook {
         if (containsKey(MediaFormat.KEY_MIME)) getString(MediaFormat.KEY_MIME) else null
     }.getOrNull()
 
+    private fun String.normalizedMime(): String = substringBefore(';').trim().lowercase(Locale.ROOT)
+
+    private fun MediaFormat.normalizedMime(): String? = mime()?.normalizedMime()
+
     private fun MediaFormat.isVideoFormatLike(fallbackMime: String?): Boolean {
-        val mime = mime() ?: fallbackMime
+        val mime = (mime() ?: fallbackMime)?.normalizedMime()
         return mime?.startsWith("video/") == true
     }
 
@@ -807,7 +817,13 @@ object MediaCodecHook {
 
     private fun MediaFormat.mergeWith(newer: MediaFormat): MediaFormat {
         val merged = MediaFormat(this)
+        val keepEncodedCodecMetadata =
+            normalizedMime() != MediaFormat.MIMETYPE_VIDEO_RAW &&
+                newer.normalizedMime() == MediaFormat.MIMETYPE_VIDEO_RAW
         newer.keys.forEach { key ->
+            if (keepEncodedCodecMetadata && key in RAW_OUTPUT_CODEC_METADATA_KEYS) {
+                return@forEach
+            }
             runCatching {
                 when (newer.getValueTypeForKey(key)) {
                     MediaFormat.TYPE_BYTE_BUFFER ->
