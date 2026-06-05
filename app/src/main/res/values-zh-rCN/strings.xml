@@ -7,6 +7,14 @@
     <string name="tab_overview">概览</string>
     <string name="tab_settings">设置</string>
 
+    <string name="settings_title">设置</string>
+    <string name="settings_version_format">版本 %1$s（%2$d）</string>
+    <string name="settings_source_code">源代码</string>
+    <string name="settings_about_section">关于</string>
+    <string name="settings_open_source">开源库声明</string>
+    <string name="settings_open_source_description">第三方开源库许可信息</string>
+    <string name="settings_open_source_title">开源库声明</string>
+
     <string name="video_records_title">视频记录</string>
     <plurals name="video_record_count_total">
         <item quantity="other">共 %1$d 条</item>

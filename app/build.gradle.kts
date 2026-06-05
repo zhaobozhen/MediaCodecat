@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.aboutlibraries)
 }
 
 android {
@@ -56,6 +57,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons)
 
     compileOnly(libs.libxposed.api)
+    implementation(libs.aboutlibraries.compose.m3)
     implementation(libs.backdrop)
     implementation(libs.capsule)
 
