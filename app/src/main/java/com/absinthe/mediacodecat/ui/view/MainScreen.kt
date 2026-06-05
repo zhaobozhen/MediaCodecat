@@ -27,10 +27,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.absinthe.mediacodecat.R
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
@@ -39,7 +41,11 @@ fun MainScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
-    val tabLabels = remember { listOf("记录", "概览", "设置") }
+    val tabLabels = listOf(
+        stringResource(R.string.tab_records),
+        stringResource(R.string.tab_overview),
+        stringResource(R.string.tab_settings)
+    )
     val isLightTheme = !isSystemInDarkTheme()
     val backgroundColor =
         if (isLightTheme) Color(0xFFF6F7F9)
@@ -78,12 +84,12 @@ fun MainScreen(
                 )
 
                 1 -> PlaceholderTab(
-                    title = "概览",
+                    title = tabLabels[1],
                     modifier = Modifier.fillMaxSize()
                 )
 
                 else -> PlaceholderTab(
-                    title = "设置",
+                    title = tabLabels[2],
                     modifier = Modifier.fillMaxSize()
                 )
             }
