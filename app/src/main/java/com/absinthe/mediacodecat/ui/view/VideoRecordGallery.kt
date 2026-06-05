@@ -697,8 +697,8 @@ private fun VideoCoverPlaceholder(
         key3 = coverVersion
     ) {
         value = withContext(Dispatchers.IO) {
-            val file = VideoCoverStore.coverFile(context, record.sessionId)
-            if (!file.exists()) {
+            val file = VideoCoverStore.existingCoverFile(context, record.sessionId)
+            if (file == null) {
                 null
             } else {
                 BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()

@@ -41,9 +41,9 @@ object MediaCodecHook {
     private const val WINDOW_MS = 1000L
     private const val STALE_SESSION_MS = 60_000L
     private const val COVER_MIN_ELAPSED_MS = 800L
-    private const val COVER_MAX_LONG_EDGE = 384
-    private const val COVER_JPEG_QUALITY = 72
-    private const val COVER_MIME_TYPE = "image/jpeg"
+    private const val COVER_MAX_LONG_EDGE = 960
+    private const val COVER_WEBP_QUALITY = 90
+    private const val COVER_MIME_TYPE = "image/webp"
     private const val COVER_DARK_LUMA_THRESHOLD = 6f
     private const val COVER_RETRY_COOLDOWN_MS = 1_200L
     private const val CROP_LEFT = "crop-left"
@@ -664,7 +664,7 @@ object MediaCodecHook {
                 return@thread
             }
 
-            val bytes = bitmap.toJpegBytes()
+            val bytes = bitmap.toWebpBytes()
             val width = bitmap.width
             val height = bitmap.height
             bitmap.recycle()
@@ -862,9 +862,9 @@ object MediaCodecHook {
         return targetWidth to targetHeight
     }
 
-    private fun Bitmap.toJpegBytes(): ByteArray {
+    private fun Bitmap.toWebpBytes(): ByteArray {
         return ByteArrayOutputStream().use { output ->
-            compress(Bitmap.CompressFormat.JPEG, COVER_JPEG_QUALITY, output)
+            compress(Bitmap.CompressFormat.WEBP_LOSSY, COVER_WEBP_QUALITY, output)
             output.toByteArray()
         }
     }
