@@ -1,18 +1,18 @@
 package com.absinthe.mediacodecat.manager
 
-import android.view.Surface
-import android.view.View
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 
-object SurfaceRegistry {
-    private val map = mutableMapOf<Surface, View>()
+object SurfaceHolderRegistry {
+    private val map = mutableMapOf<SurfaceHolder, SurfaceView>()
 
-    fun register(surface: Surface, view: View) {
-        map[surface] = view
+    fun register(holder: SurfaceHolder, surface: SurfaceView) {
+        map[holder] = surface
     }
 
-    fun unregister(surface: Surface) {
-        map.remove(surface)
+    fun unregister(holder: SurfaceHolder) {
+        map.remove(holder)
     }
 
-    fun findView(surface: Surface): View? = map[surface]
+    fun findView(holder: SurfaceHolder): SurfaceView? = map[holder]
 }
