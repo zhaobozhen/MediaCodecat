@@ -10,8 +10,13 @@ import java.util.concurrent.ConcurrentHashMap
 
 class VideoRecordReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != VideoRecordContract.Broadcast.ACTION_UPSERT) return
+        when (intent.action) {
+            VideoRecordContract.Broadcast.ACTION_UPSERT -> persistRecord(context, intent)
+            VideoRecordContract.Broadcast.ACTION_UPSERT_COVER -> persistCover(context, intent)
+        }
+    }
 
+    private fun persistRecord(context: Context, intent: Intent) {
         val values = intent.recordValues() ?: run {
             Log.d(TAG, "Missing video record broadcast values")
             return
@@ -29,6 +34,26 @@ class VideoRecordReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun persistCover(context: Context, intent: Intent) {
+        val sessionId = intent.getStringExtra(VideoRecordContract.Broadcast.EXTRA_COVER_SESSION_ID).orEmpty()
+        val bytes = intent.getByteArrayExtra(VideoRecordContract.Broadcast.EXTRA_COVER_BYTES)
+        if (sessionId.isBlank() || bytes == null || bytes.isEmpty()) {
+            Log.d(TAG, "Missing video cover broadcast values")
+            return
+        }
+
+        runCatching {
+            VideoCoverStore.save(context, sessionId, bytes)
+            context.contentResolver.notifyChange(VideoRecordContract.Records.CONTENT_URI, null)
+        }.onSuccess {
+            if (loggedCoverSessions.add(sessionId)) {
+                Log.d(TAG, "Persisted video cover via receiver, session=$sessionId")
+            }
+        }.onFailure { throwable ->
+            Log.d(TAG, "Failed to persist video cover via receiver, session=$sessionId", throwable)
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun Intent.recordValues(): ContentValues? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -42,5 +67,6 @@ class VideoRecordReceiver : BroadcastReceiver() {
         private const val TAG = "MediaCodecat"
 
         private val loggedSessions = ConcurrentHashMap.newKeySet<String>()
+        private val loggedCoverSessions = ConcurrentHashMap.newKeySet<String>()
     }
 }

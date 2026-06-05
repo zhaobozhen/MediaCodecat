@@ -8,8 +8,15 @@ object VideoRecordContract {
 
     object Broadcast {
         const val ACTION_UPSERT = "$MODULE_PACKAGE.action.UPSERT_VIDEO_RECORD"
+        const val ACTION_UPSERT_COVER = "$MODULE_PACKAGE.action.UPSERT_VIDEO_COVER"
         const val RECEIVER_CLASS = "$MODULE_PACKAGE.data.VideoRecordReceiver"
         const val EXTRA_VALUES = "$MODULE_PACKAGE.extra.VIDEO_RECORD_VALUES"
+        const val EXTRA_COVER_SESSION_ID = "$MODULE_PACKAGE.extra.COVER_SESSION_ID"
+        const val EXTRA_COVER_BYTES = "$MODULE_PACKAGE.extra.COVER_BYTES"
+        const val EXTRA_COVER_MIME_TYPE = "$MODULE_PACKAGE.extra.COVER_MIME_TYPE"
+        const val EXTRA_COVER_WIDTH = "$MODULE_PACKAGE.extra.COVER_WIDTH"
+        const val EXTRA_COVER_HEIGHT = "$MODULE_PACKAGE.extra.COVER_HEIGHT"
+        const val EXTRA_COVER_CAPTURED_AT_MS = "$MODULE_PACKAGE.extra.COVER_CAPTURED_AT_MS"
     }
 
     private val AUTHORITY_URI: Uri = Uri.parse("content://$AUTHORITY")
