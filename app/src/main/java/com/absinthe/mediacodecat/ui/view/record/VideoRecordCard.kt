@@ -6,6 +6,7 @@ import android.util.LruCache
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.absinthe.mediacodecat.data.VideoCoverStore
 import com.absinthe.mediacodecat.model.VideoRecord
-import com.absinthe.mediacodecat.ui.component.GlassPanel
 import com.absinthe.mediacodecat.ui.view.record.formatter.VideoRecordStrings
 import com.absinthe.mediacodecat.ui.view.record.formatter.aspectRatio
 import com.absinthe.mediacodecat.ui.view.record.formatter.attributeLabels
@@ -60,7 +60,6 @@ import com.absinthe.mediacodecat.ui.view.record.formatter.timeRangeTitle
 import com.absinthe.mediacodecat.ui.view.record.formatter.toAnnotatedString
 import com.absinthe.mediacodecat.ui.view.record.formatter.usesSideCoverLayout
 import com.absinthe.mediacodecat.ui.view.record.formatter.videoRecordStrings
-import com.kyant.backdrop.Backdrop
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -68,17 +67,20 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun VideoRecordCard(
     record: VideoRecord,
-    backdrop: Backdrop,
     coverVersion: Int,
-    highlightAngle: () -> Float,
     modifier: Modifier = Modifier
 ) {
     val strings = videoRecordStrings()
+    val shape = RoundedCornerShape(8.dp)
+    val containerColor = MaterialTheme.colorScheme.surface
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.56f)
 
-    GlassPanel(
-        backdrop = backdrop,
-        highlightAngle = highlightAngle,
-        modifier = modifier.fillMaxWidth()
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(containerColor)
+            .border(1.dp, borderColor, shape)
     ) {
         if (record.usesSideCoverLayout()) {
             SideCoverRecordCardContent(

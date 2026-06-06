@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -18,9 +19,12 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -33,6 +37,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -40,6 +45,7 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -60,19 +66,25 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.absinthe.mediacodecat.R
 import com.absinthe.mediacodecat.data.DataSource
 import com.absinthe.mediacodecat.data.VideoRecordContract
 import com.absinthe.mediacodecat.model.VideoRecord
 import com.absinthe.mediacodecat.ui.view.record.formatter.dateTitle
-import com.absinthe.mediacodecat.utils.rememberUiSensor
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.drawPlainBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.runtimeShaderEffect
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -202,8 +214,7 @@ fun VideoRecordGallery(
     val headerBackdrop = rememberLayerBackdrop {
         drawContent()
     }
-    val uiSensor = rememberUiSensor()
-    val highlightAngle = remember(uiSensor) { { uiSensor.gravityAngle } }
+    val snackbarPadding = edgeToEdgeSnackbarPadding()
 
     Box(modifier = modifier) {
         Box(
@@ -218,14 +229,12 @@ fun VideoRecordGallery(
                     modifier = Modifier.fillMaxSize()
                 )
                 else -> RecordGrid(
-                    backdrop = backdrop,
                     galleryItems = galleryItems,
                     coverVersion = coverVersion,
                     isLoadingMore = isLoadingPage && isLoaded,
                     canLoadMore = canLoadMore,
                     onLoadMore = ::loadNextPage,
                     onDeleteRecord = ::deleteRecord,
-                    highlightAngle = highlightAngle,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -241,25 +250,88 @@ fun VideoRecordGallery(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    bottom = GallerySnackbarBottomPadding
-                )
+                .padding(snackbarPadding)
+        ) { snackbarData ->
+            LiquidUndoSnackbar(
+                snackbarData = snackbarData,
+                backdrop = headerBackdrop
+            )
+        }
+    }
+}
+
+@Composable
+private fun LiquidUndoSnackbar(
+    snackbarData: SnackbarData,
+    backdrop: Backdrop,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(percent = 50)
+    val containerColor = colorScheme.surfaceContainerHighest.copy(alpha = 0.48f)
+    val actionLabel = snackbarData.visuals.actionLabel
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .clip(shape)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(8f.dp.toPx())
+                    lens(10f.dp.toPx(), 14f.dp.toPx())
+                },
+                highlight = {
+                    Highlight.Default.copy(alpha = 0.44f)
+                },
+                shadow = {
+                    Shadow(radius = 12.dp, alpha = 0.18f)
+                },
+                innerShadow = {
+                    InnerShadow(radius = 8.dp, alpha = 0.28f)
+                },
+                onDrawSurface = {
+                    drawRect(containerColor)
+                }
+            )
+            .padding(start = 18.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = snackbarData.visuals.message,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
+
+        if (actionLabel != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            TextButton(
+                onClick = snackbarData::performAction
+            ) {
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colorScheme.primary
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun RecordGrid(
-    backdrop: Backdrop,
     galleryItems: List<VideoGalleryItem>,
     coverVersion: Int,
     isLoadingMore: Boolean,
     canLoadMore: Boolean,
     onLoadMore: () -> Unit,
     onDeleteRecord: (VideoRecord) -> Unit,
-    highlightAngle: () -> Float,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
@@ -304,10 +376,8 @@ private fun RecordGrid(
                     is VideoGalleryItem.Header -> DateHeader(item)
                     is VideoGalleryItem.RecordCell -> DismissibleVideoRecordCard(
                         record = item.record,
-                        backdrop = backdrop,
                         coverVersion = coverVersion,
-                        onDelete = onDeleteRecord,
-                        highlightAngle = highlightAngle
+                        onDelete = onDeleteRecord
                     )
                 }
             }
@@ -334,12 +404,25 @@ private fun rememberShouldLoadMore(gridState: LazyGridState) = remember(gridStat
 }
 
 @Composable
+private fun edgeToEdgeSnackbarPadding(): PaddingValues {
+    val layoutDirection = LocalLayoutDirection.current
+    val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+    return PaddingValues(
+        start = safeDrawingPadding.calculateStartPadding(layoutDirection) + 36.dp,
+        end = safeDrawingPadding.calculateEndPadding(layoutDirection) + 36.dp,
+        bottom = navigationBarsPadding.calculateBottomPadding() +
+            BottomBarBottomPadding +
+            BottomBarHeight +
+            GallerySnackbarBottomGap
+    )
+}
+
+@Composable
 private fun DismissibleVideoRecordCard(
     record: VideoRecord,
-    backdrop: Backdrop,
     coverVersion: Int,
     onDelete: (VideoRecord) -> Unit,
-    highlightAngle: () -> Float,
     modifier: Modifier = Modifier
 ) {
     val dismissState = remember(record.sessionId) {
@@ -352,10 +435,12 @@ private fun DismissibleVideoRecordCard(
     SwipeToDismissBox(
         state = dismissState,
         backgroundContent = {
-            DeleteRecordSwipeBackground(
-                direction = dismissState.dismissDirection,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (dismissState.dismissDirection != SwipeToDismissBoxValue.Settled) {
+                DeleteRecordSwipeBackground(
+                    direction = dismissState.dismissDirection,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         },
         modifier = modifier.fillMaxWidth(),
         enableDismissFromStartToEnd = true,
@@ -369,9 +454,7 @@ private fun DismissibleVideoRecordCard(
     ) {
         VideoRecordCard(
             record = record,
-            backdrop = backdrop,
-            coverVersion = coverVersion,
-            highlightAngle = highlightAngle
+            coverVersion = coverVersion
         )
     }
 }
@@ -606,7 +689,11 @@ private val GalleryHeaderContentHeight = 132.dp
 
 private val GalleryHeaderMaskHeight = 156.dp
 
-private val GallerySnackbarBottomPadding = 104.dp
+private val BottomBarHeight = 64.dp
+
+private val BottomBarBottomPadding = 16.dp
+
+private val GallerySnackbarBottomGap = 12.dp
 
 private val CompactWidthBreakpoint = 600.dp
 
