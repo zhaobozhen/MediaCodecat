@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
@@ -58,13 +57,8 @@ class VideoRecordReceiver : BroadcastReceiver() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun Intent.recordValues(): ContentValues? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            getParcelableExtra(VideoRecordContract.Broadcast.EXTRA_VALUES, ContentValues::class.java)
-        } else {
-            getParcelableExtra(VideoRecordContract.Broadcast.EXTRA_VALUES)
-        }
+        return getParcelableExtra(VideoRecordContract.Broadcast.EXTRA_VALUES, ContentValues::class.java)
     }
 
     companion object {
