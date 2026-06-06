@@ -1,12 +1,14 @@
 package com.absinthe.mediacodecat
 
 import android.util.Log
+import androidx.annotation.Keep
 import com.absinthe.mediacodecat.hook.MediaCodecHook
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import java.util.concurrent.atomic.AtomicBoolean
 
+@Keep
 class HookEntry : XposedModule() {
     private val hookInstalled = AtomicBoolean(false)
     private var processName: String = "unknown"
