@@ -8,9 +8,13 @@ import com.absinthe.mediacodecat.R
 internal fun videoRecordStrings(): VideoRecordStrings {
     return VideoRecordStrings(
         fallbackVideo = stringResource(R.string.video_record_fallback_video),
+        fallbackSurface = stringResource(R.string.video_record_fallback_surface),
         unknownSize = stringResource(R.string.video_record_unknown_size),
         emptyValue = stringResource(R.string.video_record_empty_value),
         codecFormat = stringResource(R.string.video_record_codec_format),
+        viewAttributeFormat = stringResource(R.string.video_record_attribute_view_format),
+        activityAttributeFormat = stringResource(R.string.video_record_attribute_activity_format),
+        secureWindowAttribute = stringResource(R.string.video_record_attribute_secure_window),
         bitrateAttributeFormat = stringResource(R.string.video_record_attribute_bitrate_format),
         frameRateAttributeFormat = stringResource(R.string.video_record_attribute_frame_rate_format),
         rotationAttributeFormat = stringResource(R.string.video_record_attribute_rotation_format),
@@ -39,9 +43,13 @@ internal fun videoRecordStrings(): VideoRecordStrings {
 
 internal data class VideoRecordStrings(
     val fallbackVideo: String,
+    val fallbackSurface: String,
     val unknownSize: String,
     val emptyValue: String,
     val codecFormat: String,
+    val viewAttributeFormat: String,
+    val activityAttributeFormat: String,
+    val secureWindowAttribute: String,
     val bitrateAttributeFormat: String,
     val frameRateAttributeFormat: String,
     val rotationAttributeFormat: String,

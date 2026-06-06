@@ -1,6 +1,7 @@
 package com.absinthe.mediacodecat.ui.view.record.formatter
 
 import android.media.MediaFormat
+import com.absinthe.mediacodecat.data.VideoRecordContract
 import com.absinthe.mediacodecat.model.VideoRecord
 import com.absinthe.mediacodecat.ui.view.record.CoverDefaultAspectRatio
 import com.absinthe.mediacodecat.ui.view.record.CoverFrame
@@ -14,12 +15,13 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.json.JSONObject
 
 internal fun VideoRecord.primaryTitle(strings: VideoRecordStrings): String {
     return buildString {
         append(resolutionLabel(strings))
         append(" ")
-        append(mime.ifBlank { strings.fallbackVideo })
+        append(mimeLabel(strings))
     }
 }
 
@@ -28,13 +30,31 @@ internal fun VideoRecord.codecLine(strings: VideoRecordStrings): String {
 }
 
 internal fun VideoRecord.attributeLabels(strings: VideoRecordStrings): List<AttributeLabel> {
+    if (isFallbackSurfaceRecord()) {
+        return fallbackSurfaceAttributeLabels(strings)
+    }
+
     return listOfNotNull(
         bitrateAttributeLabel(strings),
         frameRateAttributeLabel(strings),
-        AttributeLabel(strings.rotationAttributeFormat, rotationLabel(strings)),
-        AttributeLabel(strings.colorAttributeFormat, colorLabel(strings)),
+        rotationAttributeLabel(strings),
+        colorAttributeLabel(strings),
         profileAttributeLabel(strings),
         levelAttributeLabel(strings)
+    )
+}
+
+private fun VideoRecord.fallbackSurfaceAttributeLabels(strings: VideoRecordStrings): List<AttributeLabel> {
+    val json = mediaFormatJson() ?: return emptyList()
+    return listOfNotNull(
+        json.optStringValue(VideoRecordContract.Records.FALLBACK_VIEW_CLASS_KEY)
+            ?.simpleClassName()
+            ?.let { AttributeLabel(strings.viewAttributeFormat, it) },
+        json.optStringValue(VideoRecordContract.Records.FALLBACK_ACTIVITY_CLASS_KEY)
+            ?.simpleClassName()
+            ?.let { AttributeLabel(strings.activityAttributeFormat, it) },
+        AttributeLabel(strings.secureWindowAttribute, "")
+            .takeIf { json.optInt(VideoRecordContract.Records.FALLBACK_SECURE_WINDOW_KEY, 0) == 1 }
     )
 }
 
@@ -56,18 +76,20 @@ private fun VideoRecord.frameRateAttributeLabel(strings: VideoRecordStrings): At
     return AttributeLabel(strings.frameRateAttributeFormat, label)
 }
 
-private fun VideoRecord.rotationLabel(strings: VideoRecordStrings): String {
-    return rotationDegrees?.let { "${it}\u00B0" } ?: strings.emptyValue
+private fun VideoRecord.rotationAttributeLabel(strings: VideoRecordStrings): AttributeLabel? {
+    val rotation = rotationDegrees ?: return null
+    return AttributeLabel(strings.rotationAttributeFormat, "${rotation}\u00B0")
 }
 
-private fun VideoRecord.colorLabel(strings: VideoRecordStrings): String {
+private fun VideoRecord.colorAttributeLabel(strings: VideoRecordStrings): AttributeLabel? {
     val standard = colorStandard?.let { colorStandardLabel(it, strings) }
     val range = colorRange?.let { colorRangeLabel(it, strings) }
     val transfer = colorTransfer?.let { colorTransferLabel(it, strings) }
-    return listOfNotNull(standard, range, transfer)
+    val label = listOfNotNull(standard, range, transfer)
         .takeIf { it.isNotEmpty() }
         ?.joinToString("/")
-        ?: strings.emptyValue
+        ?: return null
+    return AttributeLabel(strings.colorAttributeFormat, label)
 }
 
 private fun colorStandardLabel(value: Int, strings: VideoRecordStrings): String {
@@ -113,6 +135,30 @@ private fun VideoRecord.levelAttributeLabel(strings: VideoRecordStrings): Attrib
 
 private fun VideoRecord.resolutionLabel(strings: VideoRecordStrings): String {
     return if (width != null && height != null) "${width}x$height" else strings.unknownSize
+}
+
+private fun VideoRecord.mimeLabel(strings: VideoRecordStrings): String {
+    return if (isFallbackSurfaceRecord()) {
+        strings.fallbackSurface
+    } else {
+        mime.ifBlank { strings.fallbackVideo }
+    }
+}
+
+private fun VideoRecord.isFallbackSurfaceRecord(): Boolean {
+    return mime == VideoRecordContract.Records.FALLBACK_SURFACE_MIME
+}
+
+private fun VideoRecord.mediaFormatJson(): JSONObject? {
+    return runCatching { JSONObject(mediaFormat) }.getOrNull()
+}
+
+private fun JSONObject.optStringValue(key: String): String? {
+    return optString(key).takeIf { it.isNotBlank() && it != "null" }
+}
+
+private fun String.simpleClassName(): String {
+    return substringAfterLast('.').substringAfterLast('$').ifBlank { this }
 }
 
 internal fun VideoRecord.aspectRatio(): Float? {

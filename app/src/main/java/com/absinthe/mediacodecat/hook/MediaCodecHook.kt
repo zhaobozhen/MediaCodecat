@@ -14,8 +14,13 @@ import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
+import com.absinthe.mediacodecat.data.VideoRecordContract
 import com.absinthe.mediacodecat.data.VideoRecordSink
 import com.absinthe.mediacodecat.manager.SurfaceRegistry
+import com.absinthe.mediacodecat.settings.HookSettings
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.ref.WeakReference
@@ -28,10 +33,20 @@ import java.util.concurrent.ConcurrentHashMap
 object MediaCodecHook {
 
     private const val TAG = "MediaCodecat"
+    private const val NO_JAVA_CODEC_DIAGNOSTIC_DELAY_MS = 4_000L
+    private const val FALLBACK_CODEC_NAME = "Native/Surface fallback"
+    private const val NATIVE_CONFIGURE_FLAG_ENCODE = 1
+    private const val INLINE_HOOK_STATE_UNAVAILABLE = -1
+    private const val INLINE_HOOK_STATE_DISABLED = 0
+    private const val INLINE_HOOK_STATE_ENABLED = 1
 
     private val sessions = ConcurrentHashMap<Int, CodecSession>()
+    private val nativeSessions = ConcurrentHashMap<Long, CodecSession>()
+    private val nativeSessionPtrs = ConcurrentHashMap<Int, Long>()
+    private val fallbackSessions = ConcurrentHashMap<String, CodecSession>()
     private val renderMissingSessionKeys = ConcurrentHashMap.newKeySet<Int>()
     private val hookedSurfaceHolderClasses = ConcurrentHashMap.newKeySet<Class<*>>()
+    private val noJavaCodecDiagnosticKeys = ConcurrentHashMap.newKeySet<String>()
     private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private val rateWorker by lazy {
         CodecRateWorker(
@@ -51,16 +66,23 @@ object MediaCodecHook {
     private var xposedModule: XposedModule? = null
     @Volatile
     private var resumedActivity: WeakReference<Activity>? = null
+    @Volatile
+    private var installedPackageName: String = ""
+    @Volatile
+    private var installedProcessName: String = "unknown"
 
     fun install(module: XposedModule, packageName: String, processName: String) {
         xposedModule = module
+        installedPackageName = packageName
+        installedProcessName = processName
+        NativeMediaCodecBridge.refreshMediaNdkInlineHooks()
 
         val codecClass = MediaCodec::class.java
         val intType = Int::class.javaPrimitiveType!!
         val longType = Long::class.javaPrimitiveType!!
         val booleanType = Boolean::class.javaPrimitiveType!!
 
-        installActivityTrackingHooks(module)
+        installActivityTrackingHooks(module, packageName, processName)
         installSurfaceTrackingHooks(module, intType)
 
         hookAfter(
@@ -306,7 +328,7 @@ object MediaCodecHook {
         logInfo("MediaCodecHook: installed, package=$packageName, process=$processName")
     }
 
-    private fun installActivityTrackingHooks(module: XposedModule) {
+    private fun installActivityTrackingHooks(module: XposedModule, packageName: String, processName: String) {
         val activityClass = Activity::class.java
         hookAfter(
             module = module,
@@ -315,6 +337,7 @@ object MediaCodecHook {
         ) { chain, _ ->
             val activity = chain.thisObject as? Activity ?: return@hookAfter
             resumedActivity = WeakReference(activity)
+            scheduleNoJavaCodecDiagnostic(activity, packageName, processName)
         }
 
         hookBefore(
@@ -326,6 +349,7 @@ object MediaCodecHook {
             if (resumedActivity?.get() === activity) {
                 resumedActivity = null
             }
+            closeFallbackSession(activityFallbackKey(processName, activity))
         }
     }
 
@@ -383,14 +407,6 @@ object MediaCodecHook {
             installSurfaceHolderHook(module, holder.javaClass)
         }
 
-        hookBefore(
-            module = module,
-            method = surfaceViewClass.optionalMethod("onDetachedFromWindow"),
-            label = "SurfaceView.onDetachedFromWindow"
-        ) { chain ->
-            (chain.thisObject as? SurfaceView)?.let(SurfaceRegistry::unregister)
-        }
-
         hookAfter(
             module = module,
             method = textureViewClass.optionalMethod("getSurfaceTexture"),
@@ -413,11 +429,194 @@ object MediaCodecHook {
 
         hookBefore(
             module = module,
-            method = textureViewClass.optionalMethod("onDetachedFromWindow"),
-            label = "TextureView.onDetachedFromWindow"
+            method = View::class.java.optionalMethod("onDetachedFromWindow"),
+            label = "View.onDetachedFromWindow"
         ) { chain ->
-            (chain.thisObject as? TextureView)?.let(SurfaceRegistry::unregister)
+            when (val view = chain.thisObject) {
+                is SurfaceView -> SurfaceRegistry.unregister(view)
+                is TextureView -> SurfaceRegistry.unregister(view)
+            }
         }
+    }
+
+    private fun scheduleNoJavaCodecDiagnostic(activity: Activity, packageName: String, processName: String) {
+        val activityName = activity.javaClass.name
+        val diagnosticKey = activityFallbackKey(processName, activity)
+        if (!noJavaCodecDiagnosticKeys.add(diagnosticKey)) return
+
+        mainHandler.postDelayed({
+            if (resumedActivity?.get() !== activity) return@postDelayed
+            if (sessions.isNotEmpty()) return@postDelayed
+
+            val renderView = activity.window.decorView.findLargestRenderView()
+            val renderViews = activity.window.decorView.renderViewSummary()
+            logInfo(
+                "MediaCodecHook: no Java MediaCodec session after activity resume, " +
+                    "package=$packageName, process=$processName, activity=$activityName, " +
+                    "renderViews=$renderViews; app may use native AMediaCodec/WebRTC or another process"
+            )
+            if (renderView != null) {
+                createFallbackSession(
+                    key = diagnosticKey,
+                    activity = activity,
+                    renderView = renderView,
+                    packageName = packageName,
+                    processName = processName
+                )
+            }
+        }, NO_JAVA_CODEC_DIAGNOSTIC_DELAY_MS)
+    }
+
+    private fun createFallbackSession(
+        key: String,
+        activity: Activity,
+        renderView: View,
+        packageName: String,
+        processName: String
+    ) {
+        val width = renderView.width.takeIf { it > 0 } ?: return
+        val height = renderView.height.takeIf { it > 0 } ?: return
+        val context = activity.applicationContext ?: currentApplicationContext() ?: return
+        val surface = renderView.fallbackSurfaceOrNull()
+        val session = CodecSession(
+            codecKey = key.hashCode(),
+            sessionId = "${context.packageName}:fallback:${UUID.randomUUID()}",
+            context = context,
+            packageName = currentPackageName(context, packageName),
+            processName = currentProcessName(processName),
+            codecName = FALLBACK_CODEC_NAME,
+            format = MediaFormat().apply {
+                setString(MediaFormat.KEY_MIME, VideoRecordContract.Records.FALLBACK_SURFACE_MIME)
+                setInteger(MediaFormat.KEY_WIDTH, width)
+                setInteger(MediaFormat.KEY_HEIGHT, height)
+                setString(VideoRecordContract.Records.FALLBACK_SOURCE_KEY, "render-view")
+                setString(VideoRecordContract.Records.FALLBACK_VIEW_CLASS_KEY, renderView.javaClass.name)
+                setString(VideoRecordContract.Records.FALLBACK_ACTIVITY_CLASS_KEY, activity.javaClass.name)
+                setString(
+                    VideoRecordContract.Records.FALLBACK_SURFACE_CLASS_KEY,
+                    surface?.javaClass?.name ?: renderView.javaClass.name
+                )
+                setInteger(
+                    VideoRecordContract.Records.FALLBACK_SECURE_WINDOW_KEY,
+                    if (activity.window.isSecureWindow()) 1 else 0
+                )
+            },
+            surface = surface,
+            firstSeenAtMs = System.currentTimeMillis()
+        )
+        session.surfaceId = surface?.stableId() ?: renderView.stableViewId()
+
+        if (fallbackSessions.putIfAbsent(key, session) != null) return
+
+        publishRecord(session, requireMetrics = false)
+        coverCapture.scheduleDelayedCapture(session, "activityFallback")
+        logInfo(
+            "MediaCodecHook: fallback render view capture scheduled, " +
+                "session=${session.sessionId}, view=${renderView.renderViewSummary()}, surface=${session.surfaceId}"
+        )
+    }
+
+    private fun closeFallbackSession(key: String) {
+        noJavaCodecDiagnosticKeys.remove(key)
+        val session = fallbackSessions.remove(key) ?: return
+        session.close()
+        publishRecord(session, requireMetrics = false)
+    }
+
+    private fun activityFallbackKey(processName: String, activity: Activity): String {
+        return "$processName:${activity.javaClass.name}"
+    }
+
+    fun onNativeConfigured(
+        codecPtr: Long,
+        codecName: String?,
+        mime: String?,
+        width: Int,
+        height: Int,
+        flags: Int,
+        nativeWindowPtr: Long
+    ) {
+        if (codecPtr == 0L) return
+        val normalizedMime = mime?.trim()?.takeIf { it.startsWith("video/") } ?: return
+        closeNativeSession(codecPtr)
+
+        if (flags and NATIVE_CONFIGURE_FLAG_ENCODE != 0) {
+            logDebug("NativeMediaCodecHook: skip video encoder codec=$codecName, mime=$normalizedMime")
+            return
+        }
+
+        val context = currentApplicationContext() ?: run {
+            logDebug("NativeMediaCodecHook: skip native video record, app context is null")
+            return
+        }
+        val codecKey = nativeCodecKey(codecPtr)
+        val recordCodecName = nativeCodecName(codecName)
+        val format = MediaFormat().apply {
+            setString(MediaFormat.KEY_MIME, normalizedMime)
+            if (width > 0) setInteger(MediaFormat.KEY_WIDTH, width)
+            if (height > 0) setInteger(MediaFormat.KEY_HEIGHT, height)
+            setString("mediacodecat-native-codec-ptr", codecPtr.hexPointer())
+            if (nativeWindowPtr != 0L) {
+                setString("mediacodecat-native-window", nativeWindowPtr.hexPointer())
+            }
+        }
+        val session = CodecSession(
+            codecKey = codecKey,
+            sessionId = "${context.packageName}:native:${UUID.randomUUID()}",
+            context = context,
+            packageName = currentPackageName(context, installedPackageName),
+            processName = currentProcessName(installedProcessName),
+            codecName = recordCodecName,
+            format = format,
+            surface = null,
+            firstSeenAtMs = System.currentTimeMillis()
+        )
+        session.surfaceId = nativeWindowPtr.takeIf { it != 0L }?.let { "nativeWindow@${it.toString(16)}" }
+
+        nativeSessions[codecPtr] = session
+        nativeSessionPtrs[codecKey] = codecPtr
+        publishRecord(session, requireMetrics = false)
+        rateWorker.start(session)
+        logInfo(
+            "NativeMediaCodecHook: configured video codec=$recordCodecName, " +
+                "mime=$normalizedMime, size=${width}x$height, window=${session.surfaceId}, " +
+                "session=${session.sessionId}"
+        )
+    }
+
+    fun onNativeInputBufferQueued(codecPtr: Long, size: Int, presentationTimeUs: Long) {
+        if (size <= 0) return
+        nativeSessions[codecPtr]?.let { session ->
+            val frameCount = session.offerInput(size, presentationTimeUs)
+            coverCapture.maybeCapture(session, frameCount, "nativeQueueInputBuffer")
+        }
+    }
+
+    fun onNativeOutputBufferReleased(codecPtr: Long, render: Boolean) {
+        val session = nativeSessions[codecPtr] ?: return
+        val frameCount = if (render) {
+            session.offerRenderedFrame()
+        } else {
+            session.offerNonRenderedOutput()
+        }
+        if (render && session.coverFrameLogged.compareAndSet(false, true)) {
+            logDebug(
+                "NativeMediaCodecHook: rendered video frame " +
+                    "session=${session.sessionId}, window=${session.surfaceId}"
+            )
+        }
+        coverCapture.maybeCapture(session, frameCount, "nativeReleaseOutputBuffer")
+    }
+
+    fun onNativeDeleted(codecPtr: Long) {
+        closeNativeSession(codecPtr)
+    }
+
+    fun mediaNdkInlineHookState(): Int {
+        val context = currentApplicationContext() ?: return INLINE_HOOK_STATE_UNAVAILABLE
+        val enabled = HookSettings.queryNativeMediaNdkInlineHookEnabled(context)
+            ?: return INLINE_HOOK_STATE_UNAVAILABLE
+        return if (enabled) INLINE_HOOK_STATE_ENABLED else INLINE_HOOK_STATE_DISABLED
     }
 
     private fun installSurfaceHolderHook(module: XposedModule, holderClass: Class<*>) {
@@ -594,8 +793,8 @@ object MediaCodecHook {
         publishRecord(session)
     }
 
-    private fun publishRecord(session: CodecSession) {
-        if (!VideoRecordSink.upsert(session.context, session.toRecord()) &&
+    private fun publishRecord(session: CodecSession, requireMetrics: Boolean = true) {
+        if (!VideoRecordSink.upsert(session.context, session.toRecord(), requireMetrics = requireMetrics) &&
             session.persistFailureLogged.compareAndSet(false, true)
         ) {
             logDebug("MediaCodecHook: failed to persist video record, session=${session.sessionId}")
@@ -645,8 +844,17 @@ object MediaCodecHook {
     private fun closeSession(codecKey: Int, session: CodecSession?) {
         if (session == null) return
         sessions.remove(codecKey, session)
+        val nativePtr = nativeSessionPtrs.remove(codecKey)
+        nativePtr?.let { nativeSessions.remove(it, session) }
         session.close()
-        publishRecord(session)
+        publishRecord(session, requireMetrics = nativePtr == null)
+    }
+
+    private fun closeNativeSession(codecPtr: Long) {
+        val session = nativeSessions.remove(codecPtr) ?: return
+        nativeSessionPtrs.remove(session.codecKey, codecPtr)
+        session.close()
+        publishRecord(session, requireMetrics = false)
     }
 
     private fun newSessionId(context: Context, codec: MediaCodec): String {
@@ -673,4 +881,90 @@ object MediaCodecHook {
             ?: "unknown"
     }
 
+    private fun nativeCodecKey(codecPtr: Long): Int {
+        val folded = codecPtr xor (codecPtr ushr 32)
+        return folded.toInt()
+    }
+
+    private fun nativeCodecName(codecName: String?): String {
+        val suffix = codecName?.takeIf { it.isNotBlank() }
+        return if (suffix == null) {
+            VideoRecordContract.Records.NATIVE_CODEC_NAME_PREFIX
+        } else {
+            "${VideoRecordContract.Records.NATIVE_CODEC_NAME_PREFIX}: $suffix"
+        }
+    }
+
+    private fun Long.hexPointer(): String = "0x${toString(16)}"
+
+    private fun View.renderViewSummary(): String {
+        val summaries = mutableListOf<String>()
+        collectRenderViewSummaries(this, summaries)
+        return summaries.takeIf { it.isNotEmpty() }?.joinToString(separator = "; ") ?: "none"
+    }
+
+    private fun View.findLargestRenderView(): View? {
+        val renderViews = mutableListOf<View>()
+        collectRenderViews(this, renderViews)
+        return renderViews.maxByOrNull { it.width.toLong() * it.height.toLong() }
+    }
+
+    private fun collectRenderViews(view: View, out: MutableList<View>) {
+        if (view.isRenderViewCandidate()) {
+            out += view
+        }
+
+        if (view !is ViewGroup) return
+        for (index in 0 until view.childCount) {
+            collectRenderViews(view.getChildAt(index), out)
+        }
+    }
+
+    private fun collectRenderViewSummaries(view: View, out: MutableList<String>) {
+        if (view is SurfaceView || view is TextureView) {
+            out += "${view.javaClass.name}(${view.width}x${view.height}, " +
+                "visible=${view.visibility == View.VISIBLE}, attached=${view.isAttachedToWindow})"
+        }
+
+        if (out.size >= 4 || view !is ViewGroup) return
+        for (index in 0 until view.childCount) {
+            collectRenderViewSummaries(view.getChildAt(index), out)
+            if (out.size >= 4) return
+        }
+    }
+
+    private fun View.isRenderViewCandidate(): Boolean {
+        return (this is SurfaceView || this is TextureView) &&
+            visibility == View.VISIBLE &&
+            isAttachedToWindow &&
+            width > 0 &&
+            height > 0
+    }
+
+    private fun View.fallbackSurfaceOrNull(): Surface? {
+        return when (this) {
+            is SurfaceView -> runCatching {
+                holder.surface
+                    ?.takeIf { it.isValid }
+                    ?.also { SurfaceRegistry.register(it, this, this) }
+            }.getOrNull()
+
+            is TextureView -> {
+                runCatching {
+                    surfaceTexture?.let { SurfaceRegistry.register(it, this) }
+                }
+                null
+            }
+
+            else -> null
+        }
+    }
+
+    private fun android.view.Window.isSecureWindow(): Boolean {
+        return attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
+    }
+
+    private fun View.stableViewId(): String {
+        return "view:${javaClass.name}@${System.identityHashCode(this).toString(16)}"
+    }
 }

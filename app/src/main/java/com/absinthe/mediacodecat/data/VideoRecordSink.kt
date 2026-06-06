@@ -9,8 +9,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 object VideoRecordSink {
-    fun upsert(context: Context, record: VideoRecord): Boolean {
-        if (!record.hasRequiredMetrics()) return true
+    fun upsert(context: Context, record: VideoRecord, requireMetrics: Boolean = true): Boolean {
+        if (requireMetrics && !record.hasRequiredMetrics()) return true
 
         if (!useBroadcastFallback.get()) {
             val providerResult = tryProviderUpsert(context, record)

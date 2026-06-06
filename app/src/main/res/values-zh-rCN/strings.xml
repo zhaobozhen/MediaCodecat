@@ -11,6 +11,9 @@
     <string name="settings_version_format">版本 %1$s（%2$d）</string>
     <string name="settings_source_code">源代码</string>
     <string name="settings_about_section">关于</string>
+    <string name="settings_capture_section">抓取</string>
+    <string name="settings_native_inline_hook">Native AMediaCodec inline hook</string>
+    <string name="settings_native_inline_hook_description">实验功能，可能导致部分系统崩溃；修改后需重启目标 App 生效。</string>
     <string name="settings_open_source">开源库声明</string>
     <string name="settings_open_source_description">第三方开源库许可信息</string>
     <string name="settings_open_source_title">开源库声明</string>
@@ -36,12 +39,16 @@
     <string name="undo">撤销</string>
 
     <string name="video_record_fallback_video">视频</string>
+    <string name="video_record_fallback_surface">渲染画面</string>
     <string name="video_record_unknown_size">未知尺寸</string>
     <string name="video_record_empty_value">-</string>
     <string name="video_record_codec_format">Codec: %1$s</string>
     <string name="video_record_overlay_codec_format">Codec：%1$s</string>
     <string name="video_record_overlay_package_format">包名：%1$s</string>
     <string name="video_record_overlay_bitrate_format">估算码率：%1$s</string>
+    <string name="video_record_attribute_view_format">视图 %1$s</string>
+    <string name="video_record_attribute_activity_format">页面 %1$s</string>
+    <string name="video_record_attribute_secure_window">安全窗口</string>
     <string name="video_record_attribute_bitrate_format">估算码率 %1$s</string>
     <string name="video_record_attribute_frame_rate_format">帧率 %1$s</string>
     <string name="video_record_attribute_rotation_format">旋转 %1$s</string>

@@ -38,7 +38,7 @@ class VideoRecordProvider : ContentProvider() {
             MATCH_RECORDS -> db.query(
                 VideoRecordContract.Records.TABLE,
                 projection,
-                requiredMetricsSelection(selection),
+                visibleRecordSelection(selection),
                 selectionArgs,
                 null,
                 null,
@@ -49,7 +49,7 @@ class VideoRecordProvider : ContentProvider() {
             MATCH_RECORD -> db.query(
                 VideoRecordContract.Records.TABLE,
                 projection,
-                requiredMetricsSelection("${VideoRecordContract.Records.SESSION_ID} = ?"),
+                visibleRecordSelection("${VideoRecordContract.Records.SESSION_ID} = ?"),
                 arrayOf(requireSessionId(uri)),
                 null,
                 null,
@@ -69,7 +69,7 @@ class VideoRecordProvider : ContentProvider() {
         }
 
         val record = VideoRecord.fromContentValues(requireNotNull(values))
-        if (!record.hasRequiredMetrics()) return null
+        if (!record.isVisibleRecord()) return null
 
         upsert(record)
         return notifyAndBuildRecordUri(record.sessionId)
@@ -93,7 +93,7 @@ class VideoRecordProvider : ContentProvider() {
             else -> throw IllegalArgumentException("Unknown URI: $uri")
         }
 
-        if (!record.hasRequiredMetrics()) return 0
+        if (!record.isVisibleRecord()) return 0
 
         upsert(record)
         notify(uri)
@@ -157,21 +157,41 @@ class VideoRecordProvider : ContentProvider() {
         private const val DEFAULT_SORT_ORDER =
             "${VideoRecordContract.Records.LAST_SEEN_AT_MS} DESC"
 
-        private const val REQUIRED_METRICS_SELECTION =
+        private const val COMPLETE_METRICS_SELECTION =
             "${VideoRecordContract.Records.BITRATE_KBPS} > 0 AND ${VideoRecordContract.Records.FRAME_RATE} > 0"
 
-        private const val INCOMPLETE_METRICS_SELECTION =
-            "${VideoRecordContract.Records.BITRATE_KBPS} IS NULL OR " +
-                "${VideoRecordContract.Records.BITRATE_KBPS} <= 0 OR " +
-                "${VideoRecordContract.Records.FRAME_RATE} IS NULL OR " +
-                "${VideoRecordContract.Records.FRAME_RATE} <= 0"
+        private const val FALLBACK_SURFACE_SELECTION =
+            "${VideoRecordContract.Records.MIME} = '${VideoRecordContract.Records.FALLBACK_SURFACE_MIME}' AND " +
+                "${VideoRecordContract.Records.WIDTH} > 0 AND ${VideoRecordContract.Records.HEIGHT} > 0"
 
-        private fun requiredMetricsSelection(selection: String?): String {
+        private const val NATIVE_CODEC_SELECTION =
+            "${VideoRecordContract.Records.CODEC_NAME} LIKE '${VideoRecordContract.Records.NATIVE_CODEC_NAME_PREFIX}%' AND " +
+                "${VideoRecordContract.Records.MIME} LIKE 'video/%' AND " +
+                "${VideoRecordContract.Records.WIDTH} > 0 AND ${VideoRecordContract.Records.HEIGHT} > 0"
+
+        private const val VISIBLE_RECORD_SELECTION =
+            "($COMPLETE_METRICS_SELECTION) OR ($FALLBACK_SURFACE_SELECTION) OR ($NATIVE_CODEC_SELECTION)"
+
+        private const val INCOMPLETE_METRICS_SELECTION =
+            "NOT ($VISIBLE_RECORD_SELECTION)"
+
+        private fun visibleRecordSelection(selection: String?): String {
             return if (selection.isNullOrBlank()) {
-                REQUIRED_METRICS_SELECTION
+                VISIBLE_RECORD_SELECTION
             } else {
-                "($selection) AND ($REQUIRED_METRICS_SELECTION)"
+                "($selection) AND ($VISIBLE_RECORD_SELECTION)"
             }
+        }
+
+        private fun VideoRecord.isVisibleRecord(): Boolean {
+            return hasRequiredMetrics() ||
+                mime == VideoRecordContract.Records.FALLBACK_SURFACE_MIME &&
+                width?.let { it > 0 } == true &&
+                height?.let { it > 0 } == true ||
+                codecName?.startsWith(VideoRecordContract.Records.NATIVE_CODEC_NAME_PREFIX) == true &&
+                mime.startsWith("video/") &&
+                width?.let { it > 0 } == true &&
+                height?.let { it > 0 } == true
         }
 
         private fun Uri.limitClause(): String? {

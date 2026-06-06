@@ -45,6 +45,12 @@
             android:exported="true"
             tools:ignore="ExportedContentProvider" />
 
+        <provider
+            android:name=".settings.HookSettingsProvider"
+            android:authorities="${applicationId}.settings"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
         <receiver
             android:name=".data.VideoRecordReceiver"
             android:exported="true"

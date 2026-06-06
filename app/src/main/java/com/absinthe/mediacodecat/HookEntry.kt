@@ -11,11 +11,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Keep
 class HookEntry : XposedModule() {
     private val hookInstalled = AtomicBoolean(false)
+    private val nativeLibraryLoaded = AtomicBoolean(false)
     private var processName: String = "unknown"
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         processName = param.processName
         log(Log.INFO, App.TAG, "module loaded, process=$processName")
+        loadNativeHookLibrary()
     }
 
     override fun onPackageLoaded(param: PackageLoadedParam) {
@@ -28,5 +30,16 @@ class HookEntry : XposedModule() {
             packageName = packageName,
             processName = processName
         )
+    }
+
+    private fun loadNativeHookLibrary() {
+        if (!nativeLibraryLoaded.compareAndSet(false, true)) return
+        runCatching {
+            System.loadLibrary("mediacodecat")
+        }.onSuccess {
+            log(Log.INFO, App.TAG, "native hook library loaded, process=$processName")
+        }.onFailure { throwable ->
+            log(Log.WARN, App.TAG, "failed to load native hook library, process=$processName", throwable)
+        }
     }
 }

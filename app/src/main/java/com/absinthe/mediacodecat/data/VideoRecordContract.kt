@@ -55,5 +55,13 @@ object VideoRecordContract {
         const val MEDIA_FORMAT = "media_format"
         const val FIRST_SEEN_AT_MS = "first_seen_at_ms"
         const val LAST_SEEN_AT_MS = "last_seen_at_ms"
+
+        const val NATIVE_CODEC_NAME_PREFIX = "Native AMediaCodec"
+        const val FALLBACK_SURFACE_MIME = "video/surface"
+        const val FALLBACK_SOURCE_KEY = "mediacodecat-fallback-source"
+        const val FALLBACK_VIEW_CLASS_KEY = "mediacodecat-view-class"
+        const val FALLBACK_ACTIVITY_CLASS_KEY = "mediacodecat-activity-class"
+        const val FALLBACK_SURFACE_CLASS_KEY = "mediacodecat-surface-class"
+        const val FALLBACK_SECURE_WINDOW_KEY = "mediacodecat-secure-window"
     }
 }

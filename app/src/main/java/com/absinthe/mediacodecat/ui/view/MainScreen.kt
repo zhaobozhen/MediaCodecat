@@ -125,6 +125,7 @@ fun MainScreen(
                             1 -> StatisticsPlaceholderTab(modifier = Modifier.fillMaxSize())
 
                             else -> SettingsScreen(
+                                backdrop = panelBackdrop,
                                 onOpenSourceNoticesClick = { showOpenSourceNotices = true },
                                 modifier = Modifier.fillMaxSize()
                             )

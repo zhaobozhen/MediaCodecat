@@ -10,6 +10,9 @@
     <string name="settings_version_format">Version %1$s (%2$d)</string>
     <string name="settings_source_code">Source Code</string>
     <string name="settings_about_section">About</string>
+    <string name="settings_capture_section">Capture</string>
+    <string name="settings_native_inline_hook">Native AMediaCodec inline hook</string>
+    <string name="settings_native_inline_hook_description">Experimental. May crash some systems; restart target apps after changing.</string>
     <string name="settings_open_source">OSS Licences</string>
     <string name="settings_open_source_description">Licenses for third-party libraries</string>
     <string name="settings_open_source_title">OSS Licences</string>
@@ -37,12 +40,16 @@
     <string name="undo">Undo</string>
 
     <string name="video_record_fallback_video">video</string>
+    <string name="video_record_fallback_surface">render surface</string>
     <string name="video_record_unknown_size">unknown size</string>
     <string name="video_record_empty_value">-</string>
     <string name="video_record_codec_format">Codec: %1$s</string>
     <string name="video_record_overlay_codec_format">Codec: %1$s</string>
     <string name="video_record_overlay_package_format">Package: %1$s</string>
     <string name="video_record_overlay_bitrate_format">Estimated bitrate: %1$s</string>
+    <string name="video_record_attribute_view_format">view %1$s</string>
+    <string name="video_record_attribute_activity_format">activity %1$s</string>
+    <string name="video_record_attribute_secure_window">secure window</string>
     <string name="video_record_attribute_bitrate_format">est. bitrate %1$s</string>
     <string name="video_record_attribute_frame_rate_format">fps %1$s</string>
     <string name="video_record_attribute_rotation_format">rot %1$s</string>

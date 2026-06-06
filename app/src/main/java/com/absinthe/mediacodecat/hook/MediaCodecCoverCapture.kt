@@ -14,6 +14,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowInsets
+import android.view.WindowManager
 import com.absinthe.mediacodecat.data.VideoCoverSink
 import com.absinthe.mediacodecat.manager.SurfaceRegistry
 import java.io.ByteArrayOutputStream
@@ -145,7 +146,8 @@ internal class MediaCodecCoverCapture(
                     kind = CoverTargetKind.WINDOW,
                     window = window,
                     sizeHint = decorView.sizeOrNull(),
-                    topInset = decorView.localStatusBarInsetTop()
+                    topInset = decorView.localStatusBarInsetTop(),
+                    secureWindow = window.isSecureWindow()
                 )
             }
         }
@@ -447,6 +449,7 @@ internal class MediaCodecCoverCapture(
         useTopInset: Boolean
     ) {
         if (result != PixelCopy.SUCCESS) {
+            val target = targets.getOrNull(index)
             requestCoverFromTarget(
                 session,
                 bitmap,
@@ -455,7 +458,8 @@ internal class MediaCodecCoverCapture(
                 index + 1,
                 displaySize,
                 useTopInset = false,
-                previousFailure = "${targetKind.label} PixelCopy result=$result"
+                previousFailure = "${targetKind.label} PixelCopy result=${result.pixelCopyResultName()}($result)" +
+                    target.secureWindowSuffix()
             )
             return
         }
@@ -492,6 +496,7 @@ internal class MediaCodecCoverCapture(
             }
 
             val averageLuma = bitmap.averageLuma()
+            val secureWindowSuffix = target.secureWindowSuffix()
             if (averageLuma < COVER_DARK_LUMA_THRESHOLD &&
                 index < targets.lastIndex &&
                 session.coverAttempts.get() < COVER_FRAME_THRESHOLDS.lastIndex
@@ -505,7 +510,7 @@ internal class MediaCodecCoverCapture(
                         index + 1,
                         displaySize,
                         useTopInset = false,
-                        previousFailure = "${targetKind.label} cover too dark, luma=$averageLuma"
+                        previousFailure = "${targetKind.label} cover too dark, luma=$averageLuma$secureWindowSuffix"
                     )
                 }
                 return@thread
@@ -518,7 +523,7 @@ internal class MediaCodecCoverCapture(
                 finishCoverAttempt(
                     session,
                     success = false,
-                    reason = "source=$source, ${targetKind.label} cover too dark, luma=$averageLuma"
+                    reason = "source=$source, ${targetKind.label} cover too dark, luma=$averageLuma$secureWindowSuffix"
                 )
                 return@thread
             }
@@ -587,6 +592,10 @@ private fun View.localStatusBarInsetTop(): Int {
     return (statusBarTop - location[1]).coerceIn(0, height)
 }
 
+private fun Window.isSecureWindow(): Boolean {
+    return attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
+}
+
 private data class CoverTarget(
     val kind: CoverTargetKind,
     val surface: Surface? = null,
@@ -594,7 +603,8 @@ private data class CoverTarget(
     val textureView: TextureView? = null,
     val window: Window? = null,
     val sizeHint: Pair<Int, Int>? = null,
-    val topInset: Int = 0
+    val topInset: Int = 0,
+    val secureWindow: Boolean = false
 ) {
     fun description(displaySize: Pair<Int, Int>? = null, useTopInset: Boolean = false): String {
         val size = sizeHint?.let { "${it.first}x${it.second}" } ?: "unknown"
@@ -603,7 +613,8 @@ private data class CoverTarget(
             ?.let { ", crop=${it.left},${it.top},${it.right},${it.bottom}" }
             .orEmpty()
         val inset = topInset.takeIf { it > 0 }?.let { ", topInset=$it" }.orEmpty()
-        return "${kind.label}($size$inset$crop)"
+        val secure = secureWindow.takeIf { it }?.let { ", secureWindow=true" }.orEmpty()
+        return "${kind.label}($size$inset$secure$crop)"
     }
 }
 
@@ -631,6 +642,22 @@ private fun CoverTarget.shouldRetryWithTopInset(displaySize: Pair<Int, Int>, bit
         .roundToInt()
         .coerceAtLeast(1)
     return bitmap.hasTopBlackBand(expectedInsetHeight)
+}
+
+private fun CoverTarget?.secureWindowSuffix(): String {
+    return if (this?.secureWindow == true) ", secureWindow=true" else ""
+}
+
+private fun Int.pixelCopyResultName(): String {
+    return when (this) {
+        PixelCopy.SUCCESS -> "SUCCESS"
+        PixelCopy.ERROR_UNKNOWN -> "ERROR_UNKNOWN"
+        PixelCopy.ERROR_TIMEOUT -> "ERROR_TIMEOUT"
+        PixelCopy.ERROR_SOURCE_NO_DATA -> "ERROR_SOURCE_NO_DATA"
+        PixelCopy.ERROR_SOURCE_INVALID -> "ERROR_SOURCE_INVALID"
+        PixelCopy.ERROR_DESTINATION_INVALID -> "ERROR_DESTINATION_INVALID"
+        else -> "UNKNOWN"
+    }
 }
 
 private fun Pair<Int, Int>.videoAspectCropRect(displaySize: Pair<Int, Int>, topInset: Int): Rect? {
