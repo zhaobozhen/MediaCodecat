@@ -2,7 +2,7 @@
 
 # What's this?
 
-MediaCodecat is a Xposed module for recording video codec usage in Android apps.
+MediaCodecat is an Xposed module for recording video codec usage in Android apps.
 
 ## Notes
 

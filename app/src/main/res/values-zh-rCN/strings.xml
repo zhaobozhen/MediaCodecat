@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MediaCodecat</string>
-    <string name="xposed_description">MediaCodec Cat</string>
+    <string name="xposed_description">抓取应用中播放的视频的基础信息</string>
 
     <string name="tab_records">记录</string>
     <string name="tab_overview">统计</string>
