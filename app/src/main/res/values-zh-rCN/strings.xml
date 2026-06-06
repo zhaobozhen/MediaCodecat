@@ -26,7 +26,7 @@
     <string name="empty_video_records">暂无视频记录</string>
     <string name="empty_video_records_tutorial">在 LSPosed 中开启想要抓取的 App</string>
     <string name="empty_video_records_modules_title">模块</string>
-    <string name="empty_video_records_scope_title">应用生效范围</string>
+    <string name="empty_video_records_scope_title">作用域</string>
     <string name="empty_video_records_search_apps">搜索应用</string>
     <string name="empty_video_records_target_app">目标 App</string>
     <string name="empty_video_records_target_package">com.example.video</string>

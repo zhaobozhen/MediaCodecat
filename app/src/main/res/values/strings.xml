@@ -27,7 +27,7 @@
     <string name="empty_video_records">No video records</string>
     <string name="empty_video_records_tutorial">Enable the app you want to capture in LSPosed.</string>
     <string name="empty_video_records_modules_title">Modules</string>
-    <string name="empty_video_records_scope_title">App scope</string>
+    <string name="empty_video_records_scope_title">Scope</string>
     <string name="empty_video_records_search_apps">Search apps</string>
     <string name="empty_video_records_target_app">Target app</string>
     <string name="empty_video_records_target_package">com.example.video</string>
