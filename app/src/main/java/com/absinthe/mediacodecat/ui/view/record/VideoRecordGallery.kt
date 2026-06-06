@@ -73,7 +73,9 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawPlainBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.runtimeShaderEffect
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -174,10 +176,15 @@ fun VideoRecordGallery(
         refreshRecords()
     }
 
-    DisposableEffect(appContext) {
+    DisposableEffect(appContext, scope) {
+        var refreshJob: Job? = null
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                refreshRecords()
+                refreshJob?.cancel()
+                refreshJob = scope.launch {
+                    delay(RecordRefreshDebounceMillis)
+                    refreshRecords()
+                }
             }
         }
         appContext.contentResolver.registerContentObserver(
@@ -186,6 +193,7 @@ fun VideoRecordGallery(
             observer
         )
         onDispose {
+            refreshJob?.cancel()
             appContext.contentResolver.unregisterContentObserver(observer)
         }
     }
@@ -589,6 +597,8 @@ private const val LoadMorePrefetchItemThreshold = 6
 private const val LoadingMoreItemKey = "loading_more"
 
 private const val DeleteUndoDurationMillis = 5_000L
+
+private const val RecordRefreshDebounceMillis = 250L
 
 private const val SwipeDismissThresholdFraction = 0.38f
 

@@ -3,14 +3,16 @@ package com.absinthe.mediacodecat.data
 import android.content.Context
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 object VideoCoverStore {
     private const val COVER_DIR = "covers"
     private const val COVER_EXTENSION = "webp"
     private const val LEGACY_COVER_EXTENSION = "jpg"
+    private val coverNameCache = ConcurrentHashMap<String, String>()
 
     fun coverFile(context: Context, sessionId: String): File {
-        return File(coverDir(context), "${sessionId.sha256Hex()}.$COVER_EXTENSION")
+        return File(coverDir(context), "${sessionId.coverName()}.$COVER_EXTENSION")
     }
 
     fun existingCoverFile(context: Context, sessionId: String): File? {
@@ -37,11 +39,21 @@ object VideoCoverStore {
     private fun coverDir(context: Context): File = File(context.filesDir, COVER_DIR)
 
     private fun legacyCoverFile(context: Context, sessionId: String): File {
-        return File(coverDir(context), "${sessionId.sha256Hex()}.$LEGACY_COVER_EXTENSION")
+        return File(coverDir(context), "${sessionId.coverName()}.$LEGACY_COVER_EXTENSION")
     }
+
+    private fun String.coverName(): String = coverNameCache.getOrPut(this) { sha256Hex() }
 
     private fun String.sha256Hex(): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
-        return digest.joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        return buildString(digest.size * 2) {
+            digest.forEach { byte ->
+                val value = byte.toInt() and 0xff
+                append(HEX_DIGITS[value ushr 4])
+                append(HEX_DIGITS[value and 0x0f])
+            }
+        }
     }
+
+    private const val HEX_DIGITS = "0123456789abcdef"
 }

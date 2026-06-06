@@ -5,11 +5,9 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
 object SurfaceRegistry {
-    private const val TAG = "MediaCodecat"
     private val map = ConcurrentHashMap<Surface, Item>()
 
     fun hasSurface(surface: Surface) = map.keys.contains(surface)
@@ -31,16 +29,15 @@ object SurfaceRegistry {
 
     fun addTextViewToAll(view: TextView) {
         map.keys.forEach {
-            Log.d(TAG, "SurfaceRegistry: addTextViewToAll, surface=$it")
             addTextView(it, view)
         }
     }
 
-    fun addContent(surface: Surface, content: String) {
-        Log.d(TAG, "SurfaceRegistry: addContent, surface=$surface, content=$content")
-        map.getOrPut(surface) { Item(content = content) }.content = content
-        Log.d(TAG, "SurfaceRegistry: content=${map[surface]?.content}")
-
+    fun addContent(surface: Surface, content: String): Boolean {
+        val item = map.getOrPut(surface) { Item(content = content) }
+        val changed = item.content != content
+        item.content = content
+        return changed
     }
 
     fun unregister(surface: Surface) {
@@ -54,7 +51,7 @@ object SurfaceRegistry {
     fun findSurfaceView(surface: Surface): SurfaceView? = map[surface]?.surfaceView
 
     fun findTextView(surface: Surface): TextView? = map[surface]?.textView
-    fun findTextView(): TextView? = map.values.firstOrNull()?.textView
+    fun findTextView(): TextView? = map.values.firstNotNullOfOrNull { it.textView }
 
     fun findContent(surface: Surface): String? = map[surface]?.content
 }

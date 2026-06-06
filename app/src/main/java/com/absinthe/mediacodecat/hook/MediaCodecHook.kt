@@ -13,12 +13,8 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.PixelCopy
 import android.view.Surface
-import android.view.SurfaceView
-import com.absinthe.mediacodecat.R
 import com.absinthe.mediacodecat.data.VideoCoverSink
-import com.absinthe.mediacodecat.data.VideoRecordContract
 import com.absinthe.mediacodecat.data.VideoRecordSink
-import com.absinthe.mediacodecat.manager.SurfaceRegistry
 import com.absinthe.mediacodecat.model.FrameEvent
 import com.absinthe.mediacodecat.model.VideoRecord
 import io.github.libxposed.api.XposedInterface
@@ -135,7 +131,6 @@ object MediaCodecHook {
             session.lastSeenAtMs = System.currentTimeMillis()
 
             publishRecord(session)
-            updateSurfaceContent(session)
         }
 
         hookAfter(
@@ -310,7 +305,6 @@ object MediaCodecHook {
         )
 
         publishRecord(session)
-        updateSurfaceContent(session)
         startBackgroundWorker(session)
     }
 
@@ -407,6 +401,7 @@ object MediaCodecHook {
             val alpha = 0.2
 
             while (!session.isClosed) {
+                var sessionChanged = false
                 var event = session.events.poll()
                 while (event != null) {
                     window.addLast(event)
@@ -441,8 +436,7 @@ object MediaCodecHook {
 
                     session.bitrateKbps = smoothKbps.roundToInt()
                     session.lastSeenAtMs = System.currentTimeMillis()
-                    publishRecord(session)
-                    updateSurfaceContent(session)
+                    sessionChanged = true
                 }
 
                 val inputFps = window.estimateFrameRate()
@@ -455,8 +449,7 @@ object MediaCodecHook {
 
                     session.estimatedFrameRate = smoothInputFps.toFloat()
                     session.lastSeenAtMs = System.currentTimeMillis()
-                    publishRecord(session)
-                    updateSurfaceContent(session)
+                    sessionChanged = true
                 }
 
                 if (outputWindow.isNotEmpty()) {
@@ -469,20 +462,21 @@ object MediaCodecHook {
 
                     session.estimatedFrameRate = smoothFps.toFloat()
                     session.lastSeenAtMs = System.currentTimeMillis()
-                    publishRecord(session)
-                    updateSurfaceContent(session)
+                    sessionChanged = true
                 }
 
-                val lastInputAtElapsedMs = session.lastInputAtElapsedMs
-                if (lastInputAtElapsedMs > 0 && nowElapsedMs - lastInputAtElapsedMs > STALE_SESSION_MS) {
+                if (nowElapsedMs - session.lastActivityAtElapsedMs > STALE_SESSION_MS) {
                     closeSession(session.codecKey, session)
+                }
+
+                if (sessionChanged) {
+                    publishRecord(session)
                 }
 
                 Thread.sleep(WINDOW_MS)
             }
 
             publishRecord(session)
-            updateSurfaceContent(session)
             logDebug("CodecRateWorker: stop, session=${session.sessionId}")
         }
     }
@@ -517,7 +511,6 @@ object MediaCodecHook {
             "MediaCodecHook: merged $source format, session=${session.sessionId}, format=$format"
         )
         publishRecord(session)
-        updateSurfaceContent(session)
     }
 
     private fun publishRecord(session: CodecSession) {
@@ -525,22 +518,6 @@ object MediaCodecHook {
             session.persistFailureLogged.compareAndSet(false, true)
         ) {
             logDebug("MediaCodecHook: failed to persist video record, session=${session.sessionId}")
-        }
-    }
-
-    private fun updateSurfaceContent(session: CodecSession) {
-        val surface = session.surface ?: return
-        val record = session.toRecord()
-        val content = record.toOverlayText(session.context)
-
-        SurfaceRegistry.addContent(surface, content)
-        if (SurfaceRegistry.findTextView(surface) == null) {
-            SurfaceRegistry.findTextView()?.let { SurfaceRegistry.addTextView(surface, it) }
-        }
-        SurfaceRegistry.findTextView(surface)?.let { textView ->
-            textView.post {
-                textView.text = content
-            }
         }
     }
 
@@ -599,8 +576,7 @@ object MediaCodecHook {
             cancelCoverCapture(session, "source=$source, missing surface")
             return
         }
-        val surfaceView = SurfaceRegistry.findSurfaceView(surface)
-        val (coverWidth, coverHeight) = session.coverCaptureSize(surfaceView) ?: run {
+        val (coverWidth, coverHeight) = session.coverCaptureSize() ?: run {
             cancelCoverCapture(session, "source=$source, missing cover size")
             return
         }
@@ -614,21 +590,12 @@ object MediaCodecHook {
             }
 
             runCatching {
-                if (surfaceView != null && surfaceView.isAttachedToWindow && surfaceView.holder.surface.isValid) {
-                    PixelCopy.request(
-                        surfaceView,
-                        bitmap,
-                        { result -> handleCoverCopyResult(session, bitmap, result, source) },
-                        mainHandler
-                    )
-                } else {
-                    PixelCopy.request(
-                        surface,
-                        bitmap,
-                        { result -> handleCoverCopyResult(session, bitmap, result, source) },
-                        mainHandler
-                    )
-                }
+                PixelCopy.request(
+                    surface,
+                    bitmap,
+                    { result -> handleCoverCopyResult(session, bitmap, result, source) },
+                    mainHandler
+                )
             }.onFailure { throwable ->
                 bitmap.recycle()
                 finishCoverAttempt(
@@ -711,55 +678,7 @@ object MediaCodecHook {
         sessions.remove(codecKey, session)
         session.close()
         publishRecord(session)
-        updateSurfaceContent(session)
     }
-
-    private fun VideoRecord.toOverlayText(context: Context): String {
-        val strings = context.overlayStrings()
-        return buildString {
-            append(mime)
-            if (width != null && height != null) append(" ${width}x$height")
-            codecName?.let {
-                appendLine()
-                append(strings.codecFormat.formatLocalized(it))
-            }
-            appendLine()
-            append(strings.packageFormat.formatLocalized(packageName))
-            appendLine()
-            val bitrate = bitrateKbps
-                ?.let { strings.bitrateKbpsFormat.formatLocalized(it) }
-                ?: strings.emptyValue
-            append(strings.bitrateFormat.formatLocalized(bitrate))
-        }
-    }
-
-    private fun Context.overlayStrings(): OverlayStrings {
-        val moduleContext = runCatching {
-            createPackageContext(VideoRecordContract.MODULE_PACKAGE, Context.CONTEXT_IGNORE_SECURITY)
-        }.getOrNull()
-
-        fun stringResource(id: Int, fallback: String): String =
-            moduleContext?.runCatching { getString(id) }?.getOrNull() ?: fallback
-
-        return OverlayStrings(
-            codecFormat = stringResource(R.string.video_record_overlay_codec_format, "%1\$s"),
-            packageFormat = stringResource(R.string.video_record_overlay_package_format, "%1\$s"),
-            bitrateFormat = stringResource(R.string.video_record_overlay_bitrate_format, "%1\$s"),
-            bitrateKbpsFormat = stringResource(R.string.video_record_bitrate_kbps_format, "%1\$d kbps"),
-            emptyValue = stringResource(R.string.video_record_empty_value, "-")
-        )
-    }
-
-    private data class OverlayStrings(
-        val codecFormat: String,
-        val packageFormat: String,
-        val bitrateFormat: String,
-        val bitrateKbpsFormat: String,
-        val emptyValue: String
-    )
-
-    private fun String.formatLocalized(vararg args: Any): String =
-        String.format(Locale.getDefault(), this, *args)
 
     private fun MediaCodec.key(): Int = System.identityHashCode(this)
 
@@ -947,8 +866,8 @@ object MediaCodecHook {
         @Volatile var bitrateKbps: Int? = null
         @Volatile var estimatedFrameRate: Float? = null
         @Volatile var lastSeenAtMs: Long = firstSeenAtMs
-        @Volatile var lastInputAtElapsedMs: Long = 0L
         val firstSeenAtElapsedMs: Long = SystemClock.elapsedRealtime()
+        @Volatile var lastActivityAtElapsedMs: Long = firstSeenAtElapsedMs
 
         private val closed = AtomicBoolean(false)
         val isClosed: Boolean get() = closed.get()
@@ -968,28 +887,28 @@ object MediaCodecHook {
                     presentationTimeUs = presentationTimeUs
                 )
             )
-            lastInputAtElapsedMs = nowElapsedMs
+            lastActivityAtElapsedMs = nowElapsedMs
             lastSeenAtMs = System.currentTimeMillis()
             return inputFrameCount.incrementAndGet()
         }
 
         fun offerRenderedFrame(): Int {
-            renderedFrameEvents.offer(SystemClock.elapsedRealtime())
+            val nowElapsedMs = SystemClock.elapsedRealtime()
+            renderedFrameEvents.offer(nowElapsedMs)
+            lastActivityAtElapsedMs = nowElapsedMs
             lastSeenAtMs = System.currentTimeMillis()
             return renderedFrameCount.incrementAndGet()
         }
 
         fun offerNonRenderedOutput(): Int {
+            lastActivityAtElapsedMs = SystemClock.elapsedRealtime()
             lastSeenAtMs = System.currentTimeMillis()
             return nonRenderedOutputCount.incrementAndGet()
         }
 
-        fun coverCaptureSize(surfaceView: SurfaceView?): Pair<Int, Int>? {
+        fun coverCaptureSize(): Pair<Int, Int>? {
             val formatSize = synchronized(formatLock) { format.captureDisplaySize() }
-            val viewSize = surfaceView
-                ?.takeIf { it.width > 0 && it.height > 0 }
-                ?.let { it.width to it.height }
-            return (formatSize ?: viewSize)?.scaledCoverSize()
+            return formatSize?.scaledCoverSize()
         }
 
         fun close() {

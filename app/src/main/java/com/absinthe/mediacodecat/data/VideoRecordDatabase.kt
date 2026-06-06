@@ -54,15 +54,26 @@ class VideoRecordDatabase(context: Context) : SQLiteOpenHelper(
             ON ${VideoRecordContract.Records.TABLE} (${VideoRecordContract.Records.MIME})
             """.trimIndent()
         )
+        createLastSeenIndex(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS ${VideoRecordContract.Records.TABLE}")
-        onCreate(db)
+        if (oldVersion < 2) {
+            createLastSeenIndex(db)
+        }
+    }
+
+    private fun createLastSeenIndex(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS idx_video_records_last_seen
+            ON ${VideoRecordContract.Records.TABLE} (${VideoRecordContract.Records.LAST_SEEN_AT_MS} DESC)
+            """.trimIndent()
+        )
     }
 
     companion object {
         private const val DATABASE_NAME = "video_records.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
     }
 }

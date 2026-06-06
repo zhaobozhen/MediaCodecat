@@ -2,6 +2,7 @@ package com.absinthe.mediacodecat.ui.view.record
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.LruCache
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -60,6 +61,7 @@ import com.absinthe.mediacodecat.ui.view.record.formatter.toAnnotatedString
 import com.absinthe.mediacodecat.ui.view.record.formatter.usesSideCoverLayout
 import com.absinthe.mediacodecat.ui.view.record.formatter.videoRecordStrings
 import com.kyant.backdrop.Backdrop
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -287,7 +289,7 @@ private fun PackageIcon(
         key2 = packageName
     ) {
         value = withContext(Dispatchers.IO) {
-            runCatching {
+            RecordBitmapCache.getPackageIcon(packageName)?.asImageBitmap() ?: runCatching {
                 context.packageManager
                     .getApplicationIcon(packageName)
                     .toBitmap(
@@ -295,8 +297,9 @@ private fun PackageIcon(
                         height = PackageIconBitmapSizePx,
                         config = Bitmap.Config.ARGB_8888
                     )
-                    .asImageBitmap()
             }.getOrNull()
+                ?.also { RecordBitmapCache.putPackageIcon(packageName, it) }
+                ?.asImageBitmap()
         }
     }
     Box(
@@ -376,7 +379,11 @@ private fun VideoCoverPlaceholder(
             if (file == null) {
                 null
             } else {
-                BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                val cacheKey = file.coverCacheKey()
+                RecordBitmapCache.getCover(cacheKey)?.asImageBitmap()
+                    ?: BitmapFactory.decodeFile(file.absolutePath)
+                        ?.also { RecordBitmapCache.putCover(cacheKey, it) }
+                        ?.asImageBitmap()
             }
         }
     }
@@ -417,3 +424,33 @@ private fun VideoRecord.coverColors(colorScheme: ColorScheme): List<Color> {
         else -> listOf(colorScheme.surfaceContainerHigh, colorScheme.secondaryContainer)
     }
 }
+
+private object RecordBitmapCache {
+    private val packageIcons = sizedBitmapCache(PackageIconCacheMaxKilobytes)
+    private val covers = sizedBitmapCache(CoverCacheMaxKilobytes)
+
+    @Synchronized
+    fun getPackageIcon(packageName: String): Bitmap? = packageIcons.get(packageName)
+
+    @Synchronized
+    fun putPackageIcon(packageName: String, bitmap: Bitmap) {
+        packageIcons.put(packageName, bitmap)
+    }
+
+    @Synchronized
+    fun getCover(cacheKey: String): Bitmap? = covers.get(cacheKey)
+
+    @Synchronized
+    fun putCover(cacheKey: String, bitmap: Bitmap) {
+        covers.put(cacheKey, bitmap)
+    }
+
+    private fun sizedBitmapCache(maxSizeKilobytes: Int) = object : LruCache<String, Bitmap>(maxSizeKilobytes) {
+        override fun sizeOf(key: String, value: Bitmap): Int = (value.byteCount / 1024).coerceAtLeast(1)
+    }
+}
+
+private fun File.coverCacheKey(): String = "$absolutePath:${lastModified()}:${length()}"
+
+private const val PackageIconCacheMaxKilobytes = 4 * 1024
+private const val CoverCacheMaxKilobytes = 16 * 1024

@@ -68,6 +68,7 @@ import com.mikepenz.aboutlibraries.ui.compose.m3.libraryColors
 import com.mikepenz.aboutlibraries.ui.compose.produceLibraries
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
@@ -208,6 +209,7 @@ private fun SmokeCardBackground(
         val startNanos = withFrameNanos { it }
         while (isActive) {
             value = (withFrameNanos { it } - startNanos) / NanosPerSecond
+            delay(AnimatedShaderFrameIntervalMillis)
         }
     }
     val shader = rememberRuntimeShader(AppInfoSmokeShader)
@@ -451,6 +453,7 @@ private const val OpenSourceNoticesHeaderKey = "open_source_notices_header"
 private const val AppIconBitmapSizePx = 192
 private const val SourceCodeUrl = "https://github.com/zhaobozhen/MediaCodecat"
 private const val NanosPerSecond = 1_000_000_000f
+private const val AnimatedShaderFrameIntervalMillis = 66L
 
 private val AppInfoSmokeShader = """
     uniform float2 resolution;
