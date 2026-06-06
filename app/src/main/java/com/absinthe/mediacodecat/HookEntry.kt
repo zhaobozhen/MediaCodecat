@@ -21,7 +21,7 @@ class HookEntry : XposedModule() {
     override fun onPackageLoaded(param: PackageLoadedParam) {
         val packageName = param.packageName
         if (packageName == BuildConfig.APPLICATION_ID) return
-        if (!param.isFirstPackage || !hookInstalled.compareAndSet(false, true)) return
+        if (!hookInstalled.compareAndSet(false, true)) return
 
         MediaCodecHook.install(
             module = this,
