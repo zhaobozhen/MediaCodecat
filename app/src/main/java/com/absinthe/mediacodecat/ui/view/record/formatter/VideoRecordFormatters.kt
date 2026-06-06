@@ -1,8 +1,6 @@
 package com.absinthe.mediacodecat.ui.view.record.formatter
 
 import android.media.MediaFormat
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import com.absinthe.mediacodecat.model.VideoRecord
 import com.absinthe.mediacodecat.ui.view.record.CoverDefaultAspectRatio
 import com.absinthe.mediacodecat.ui.view.record.CoverFrame
@@ -164,16 +162,6 @@ private fun VideoRecord.timestampMs(): Long {
 
 private fun Long.toZonedDateTime() =
     Instant.ofEpochMilli(coerceAtLeast(0L)).atZone(ZoneId.systemDefault())
-
-internal fun VideoRecord.coverBrush(): Brush {
-    val palette = when (sessionId.hashCode().mod(4)) {
-        0 -> listOf(Color(0xFF213547), Color(0xFF2A9D8F))
-        1 -> listOf(Color(0xFF2B2D42), Color(0xFF6C7A89))
-        2 -> listOf(Color(0xFF1F2933), Color(0xFF7A9E9F))
-        else -> listOf(Color(0xFF243B4A), Color(0xFFB08968))
-    }
-    return Brush.linearGradient(palette)
-}
 
 private val DAY_FORMATTER: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yyyy-MM-dd")

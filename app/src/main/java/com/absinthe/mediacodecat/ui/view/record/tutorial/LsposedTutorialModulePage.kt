@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,9 +39,7 @@ internal fun TutorialModuleListPage(
     skeletonAlpha: Float,
     modifier: Modifier = Modifier
 ) {
-    val pageBackground =
-        if (isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        else Color(0xFFFFEAE6)
+    val pageBackground = MaterialTheme.colorScheme.surfaceContainerLow
 
     Column(
         modifier = modifier
@@ -167,10 +164,10 @@ private fun TutorialModuleRow(
                 text = badge,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFFFFCC7A).copy(alpha = if (dimmed) 0.45f else 0.9f))
+                    .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = if (dimmed) 0.45f else 0.9f))
                     .padding(horizontal = 7.dp, vertical = 3.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF5E4A24).copy(alpha = contentAlpha),
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = contentAlpha),
                 maxLines = 1
             )
         }
@@ -198,8 +195,8 @@ private fun TutorialSkeletonLine(
 private fun TutorialSearchGlyph(
     modifier: Modifier = Modifier
 ) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(modifier = modifier.size(22.dp)) {
-        val color = Color(0xFF6F5E5C)
         drawCircle(
             color = color,
             radius = 6.dp.toPx(),

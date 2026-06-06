@@ -6,7 +6,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,8 +39,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -68,6 +68,7 @@ import com.mikepenz.aboutlibraries.ui.compose.m3.libraryColors
 import com.mikepenz.aboutlibraries.ui.compose.produceLibraries
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -129,13 +130,6 @@ private fun AppInfoCard(
     onOpenSourceNoticesClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val smokeTime by produceState(initialValue = 0f) {
-        val startNanos = withFrameNanos { it }
-        while (true) {
-            value = (withFrameNanos { it } - startNanos) / 1_000_000_000f
-        }
-    }
-
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -151,7 +145,8 @@ private fun AppInfoCard(
             contentAlignment = Alignment.Center
         ) {
             SmokeCardBackground(
-                timeSeconds = smokeTime,
+                baseColor = colors.cardBackground,
+                smokeColor = colors.cardSmoke,
                 modifier = Modifier.fillMaxSize()
             )
             Column(
@@ -205,15 +200,24 @@ private fun AppInfoCard(
 
 @Composable
 private fun SmokeCardBackground(
-    timeSeconds: Float,
+    baseColor: Color,
+    smokeColor: Color,
     modifier: Modifier = Modifier
 ) {
+    val timeSeconds by produceState(initialValue = 0f) {
+        val startNanos = withFrameNanos { it }
+        while (isActive) {
+            value = (withFrameNanos { it } - startNanos) / NanosPerSecond
+        }
+    }
     val shader = rememberRuntimeShader(AppInfoSmokeShader)
 
     Canvas(modifier = modifier) {
         shader.setFloatUniform("resolution", size.width, size.height)
         shader.setFloatUniform("time", timeSeconds)
         shader.setFloatUniform("pointer", 0.5f, 0.5f)
+        shader.setColorUniform("baseColor", baseColor.toArgb())
+        shader.setColorUniform("smokeColor", smokeColor.toArgb())
         drawRect(brush = ShaderBrush(shader))
     }
 }
@@ -339,49 +343,28 @@ private fun AppInfoActionButton(
 
 @Composable
 private fun settingsScreenColors(): SettingsScreenColors {
-    return if (isSystemInDarkTheme()) {
-        SettingsScreenColors(
-            background = Color(0xFF221615),
-            title = Color(0xFFFFE3DA),
-            sectionTitle = Color(0xFFFFB7AA),
-            cardTitle = Color(0xFFE7C6BF),
-            cardSubtitle = Color(0xFFCDB0AA),
-            cardActionContent = Color(0xFFEAD2CC),
-            cardActionBorder = Color(0xB8EAD2CC),
-            groupCard = Color(0xFF3C2B27),
-            itemTitle = Color(0xFFFFE3DA),
-            itemSubtitle = Color(0xFFD0B8B2),
-            itemIcon = Color(0xFFD1B8B1)
-        )
-    } else {
-        SettingsScreenColors(
-            background = MaterialTheme.colorScheme.background,
-            title = MaterialTheme.colorScheme.onBackground,
-            sectionTitle = MaterialTheme.colorScheme.primary,
-            cardTitle = Color.White,
-            cardSubtitle = Color.White.copy(alpha = 0.78f),
-            cardActionContent = Color.White,
-            cardActionBorder = Color.White.copy(alpha = 0.72f),
-            groupCard = MaterialTheme.colorScheme.surfaceContainerHigh,
-            itemTitle = MaterialTheme.colorScheme.onSurface,
-            itemSubtitle = MaterialTheme.colorScheme.onSurfaceVariant,
-            itemIcon = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    val colorScheme = MaterialTheme.colorScheme
+    return SettingsScreenColors(
+        background = colorScheme.background,
+        title = colorScheme.onBackground,
+        cardTitle = colorScheme.onPrimaryContainer,
+        cardSubtitle = colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+        cardActionContent = colorScheme.onPrimaryContainer,
+        cardActionBorder = colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
+        cardBackground = colorScheme.primaryContainer,
+        cardSmoke = colorScheme.onPrimaryContainer
+    )
 }
 
 private data class SettingsScreenColors(
     val background: Color,
     val title: Color,
-    val sectionTitle: Color,
     val cardTitle: Color,
     val cardSubtitle: Color,
     val cardActionContent: Color,
     val cardActionBorder: Color,
-    val groupCard: Color,
-    val itemTitle: Color,
-    val itemSubtitle: Color,
-    val itemIcon: Color
+    val cardBackground: Color,
+    val cardSmoke: Color
 )
 
 @Composable
@@ -467,11 +450,14 @@ private const val OpenSourceNoticesHeaderKey = "open_source_notices_header"
 
 private const val AppIconBitmapSizePx = 192
 private const val SourceCodeUrl = "https://github.com/zhaobozhen/MediaCodecat"
+private const val NanosPerSecond = 1_000_000_000f
 
 private val AppInfoSmokeShader = """
     uniform float2 resolution;
     uniform float2 pointer;
     uniform float time;
+    layout(color) uniform half4 baseColor;
+    layout(color) uniform half4 smokeColor;
 
     float rand(float2 n) {
         return fract(sin(dot(n, float2(12.9898, 4.1414))) * 43758.5453);
@@ -520,10 +506,7 @@ private val AppInfoSmokeShader = """
         smokeMask = smoothstep(0.06, 0.82, smokeMask + pointerFactor * 0.28);
 
         float vignette = smoothstep(1.25, 0.05, length((uv / aspect - 0.5) * float2(1.08, 1.52)));
-        float3 smokeColor = float3(0.56, 0.52, 0.50);
-        float3 backgroundColor = float3(0.12, 0.075, 0.09);
-
-        float3 finalColor = mix(backgroundColor, smokeColor, smokeMask * vignette * 0.74);
+        float3 finalColor = mix(baseColor.rgb, smokeColor.rgb, smokeMask * vignette * 0.74);
         finalColor += pointerFactor * 0.035;
 
         return half4(finalColor, 1.0);

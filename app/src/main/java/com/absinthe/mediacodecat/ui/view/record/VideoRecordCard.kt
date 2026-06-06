@@ -30,7 +30,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -50,7 +52,6 @@ import com.absinthe.mediacodecat.ui.view.record.formatter.aspectRatio
 import com.absinthe.mediacodecat.ui.view.record.formatter.attributeLabels
 import com.absinthe.mediacodecat.ui.view.record.formatter.codecLine
 import com.absinthe.mediacodecat.ui.view.record.formatter.coverAspectRatio
-import com.absinthe.mediacodecat.ui.view.record.formatter.coverBrush
 import com.absinthe.mediacodecat.ui.view.record.formatter.coverFrame
 import com.absinthe.mediacodecat.ui.view.record.formatter.normalizedMime
 import com.absinthe.mediacodecat.ui.view.record.formatter.primaryTitle
@@ -380,11 +381,12 @@ private fun VideoCoverPlaceholder(
         }
     }
     val shape = RoundedCornerShape(6.dp)
+    val coverColors = record.coverColors(MaterialTheme.colorScheme)
 
     Box(
         modifier = modifier
             .clip(shape)
-            .background(record.coverBrush()),
+            .background(Brush.linearGradient(coverColors)),
         contentAlignment = Alignment.Center
     ) {
         if (cover != null) {
@@ -398,11 +400,20 @@ private fun VideoCoverPlaceholder(
             Text(
                 text = record.mime.substringAfter('/', strings.fallbackVideo).uppercase(locale),
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.White.copy(alpha = 0.88f),
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.88f),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+private fun VideoRecord.coverColors(colorScheme: ColorScheme): List<Color> {
+    return when (sessionId.hashCode().mod(4)) {
+        0 -> listOf(colorScheme.primaryContainer, colorScheme.tertiaryContainer)
+        1 -> listOf(colorScheme.secondaryContainer, colorScheme.surfaceContainerHighest)
+        2 -> listOf(colorScheme.tertiaryContainer, colorScheme.primary)
+        else -> listOf(colorScheme.surfaceContainerHigh, colorScheme.secondaryContainer)
     }
 }

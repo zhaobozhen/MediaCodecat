@@ -5,7 +5,6 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -408,9 +407,7 @@ private fun GalleryHeader(
         val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
         val horizontalPadding = if (maxWidth < CompactWidthBreakpoint) 16.dp else 24.dp
         val topInset = safeDrawingPadding.calculateTopPadding()
-        val tintColor =
-            if (isSystemInDarkTheme()) Color(0xFF101214)
-            else Color(0xFFF6F7F9)
+        val tintColor = MaterialTheme.colorScheme.background
 
         Box(
             modifier = Modifier

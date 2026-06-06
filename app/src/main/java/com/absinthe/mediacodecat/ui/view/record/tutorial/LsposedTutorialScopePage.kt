@@ -232,6 +232,7 @@ private fun TutorialScopeCheckbox(
         } else {
             Color.Transparent
         }
+    val checkColor = MaterialTheme.colorScheme.onPrimary
 
     Canvas(modifier = modifier.size(22.dp)) {
         val cornerRadius = 5.dp.toPx()
@@ -250,14 +251,14 @@ private fun TutorialScopeCheckbox(
             val middle = Offset(size.width * 0.44f, size.height * 0.68f)
             val end = Offset(size.width * 0.74f, size.height * 0.34f)
             drawLine(
-                color = Color.White.copy(alpha = checkAlpha),
+                color = checkColor.copy(alpha = checkAlpha),
                 start = start,
                 end = middle,
                 strokeWidth = 2.dp.toPx(),
                 cap = StrokeCap.Round
             )
             drawLine(
-                color = Color.White.copy(alpha = checkAlpha),
+                color = checkColor.copy(alpha = checkAlpha),
                 start = middle,
                 end = end,
                 strokeWidth = 2.dp.toPx(),

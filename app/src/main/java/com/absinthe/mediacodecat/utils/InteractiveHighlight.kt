@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
+    val color: () -> Color,
     val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
 ) {
 
@@ -61,15 +62,16 @@ half4 main(float2 coord) {
         Modifier.drawWithContent {
             val progress = pressProgressAnimation.value
             if (progress > 0f) {
+                val highlightColor = color()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && shader != null) {
                     drawRect(
-                        Color.White.copy(0.08f * progress),
+                        highlightColor.copy(0.08f * progress),
                         blendMode = BlendMode.Plus
                     )
                     shader.apply {
                         val position = position(size, positionAnimation.value)
                         setFloatUniform("size", size.width, size.height)
-                        setColorUniform("color", Color.White.copy(0.15f * progress).toArgb())
+                        setColorUniform("color", highlightColor.copy(0.15f * progress).toArgb())
                         setFloatUniform("radius", size.minDimension * 1.5f)
                         setFloatUniform(
                             "position",
@@ -83,7 +85,7 @@ half4 main(float2 coord) {
                     )
                 } else {
                     drawRect(
-                        Color.White.copy(0.25f * progress),
+                        highlightColor.copy(0.25f * progress),
                         blendMode = BlendMode.Plus
                     )
                 }
