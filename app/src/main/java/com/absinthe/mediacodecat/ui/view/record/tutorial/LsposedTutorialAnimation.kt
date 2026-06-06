@@ -1,6 +1,6 @@
 package com.absinthe.mediacodecat.ui.view.record.tutorial
 
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -25,18 +25,18 @@ import androidx.compose.ui.unit.dp
 internal fun LsposedScopeTutorialAnimation(
     modifier: Modifier = Modifier
 ) {
-    val transition = rememberInfiniteTransition(label = "lsposed_scope_tutorial")
-    val progress by transition.animateFloat(
+    val infiniteTransition = rememberInfiniteTransition(label = "LsposedScopeTutorial")
+    val progress by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(
                 durationMillis = TutorialAnimationDurationMillis,
-                easing = FastOutSlowInEasing
+                easing = LinearEasing
             ),
             repeatMode = RepeatMode.Restart
         ),
-        label = "lsposed_scope_tutorial_progress"
+        label = "LsposedScopeTutorialProgress"
     )
     val pageProgress = ((progress - 0.38f) / 0.18f).coerceIn(0f, 1f)
     val checkedProgress = ((progress - 0.68f) / 0.18f).coerceIn(0f, 1f)
