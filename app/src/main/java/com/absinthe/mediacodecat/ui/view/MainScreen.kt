@@ -14,24 +14,18 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -43,7 +37,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,7 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -133,10 +126,7 @@ fun MainScreen(
                                 modifier = Modifier.fillMaxSize()
                             )
 
-                            1 -> PlaceholderTab(
-                                title = tabLabels[1],
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            1 -> StatisticsPlaceholderTab(modifier = Modifier.fillMaxSize())
 
                             else -> SettingsScreen(
                                 onOpenSourceNoticesClick = { showOpenSourceNotices = true },
@@ -212,45 +202,18 @@ private fun edgeToEdgeBottomTabsPadding(): PaddingValues {
 private const val OpenSourceNoticesTransitionDurationMillis = 320
 
 @Composable
-private fun PlaceholderTab(
-    title: String,
+private fun StatisticsPlaceholderTab(
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(16f.dp)
-            .systemBarsPadding()
-            .displayCutoutPadding(),
-        verticalArrangement = Arrangement.spacedBy(16f.dp)
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
     ) {
         Text(
-            text = title,
+            text = "TODO",
             style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        repeat(20) {
-            RandomColorBox()
-        }
-    }
-}
-
-@Composable
-fun RandomColorBox(
-    size: Dp = 80.dp
-) {
-    // 生成一次随机颜色并记住
-    val color = remember {
-        Color(
-            red = (0..255).random(),
-            green = (0..255).random(),
-            blue = (0..255).random()
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.Bold
         )
     }
-
-    Box(
-        modifier = Modifier
-            .size(size)
-            .background(color)
-    )
 }

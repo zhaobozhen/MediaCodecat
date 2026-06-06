@@ -61,6 +61,32 @@ object DataSource {
         } ?: 0
     }
 
+    fun deleteVideoRecord(
+        context: Context,
+        sessionId: String
+    ): Boolean {
+        return context.contentResolver.delete(
+            videoRecordUri(sessionId),
+            null,
+            null
+        ) > 0
+    }
+
+    fun restoreVideoRecord(
+        context: Context,
+        record: VideoRecord
+    ): Boolean {
+        return context.contentResolver.insert(
+            VideoRecordContract.Records.CONTENT_URI,
+            record.toContentValues()
+        ) != null
+    }
+
+    private fun videoRecordUri(sessionId: String) =
+        VideoRecordContract.Records.CONTENT_URI.buildUpon()
+            .appendPath(sessionId)
+            .build()
+
     private const val COUNT_COLUMN = "record_count"
 
     private const val VIDEO_RECORD_SORT_ORDER =

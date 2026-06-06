@@ -4,7 +4,7 @@
     <string name="xposed_description">MediaCodec Cat</string>
 
     <string name="tab_records">记录</string>
-    <string name="tab_overview">概览</string>
+    <string name="tab_overview">统计</string>
     <string name="tab_settings">设置</string>
 
     <string name="settings_title">设置</string>
@@ -24,6 +24,16 @@
     </plurals>
     <string name="loading">加载中</string>
     <string name="empty_video_records">暂无视频记录</string>
+    <string name="empty_video_records_tutorial">在 LSPosed 中开启想要抓取的 App</string>
+    <string name="empty_video_records_modules_title">模块</string>
+    <string name="empty_video_records_scope_title">应用生效范围</string>
+    <string name="empty_video_records_search_apps">搜索应用</string>
+    <string name="empty_video_records_target_app">目标 App</string>
+    <string name="empty_video_records_target_package">com.example.video</string>
+    <string name="empty_video_records_other_app">其他 App</string>
+    <string name="empty_video_records_other_package">com.example.other</string>
+    <string name="video_record_deleted">已删除视频记录</string>
+    <string name="undo">撤销</string>
 
     <string name="video_record_fallback_video">视频</string>
     <string name="video_record_unknown_size">未知尺寸</string>

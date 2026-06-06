@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.aboutlibraries)
+}
+
+val xposedModuleProperties = Properties().apply {
+    file("src/main/resources/META-INF/xposed/module.prop")
+        .inputStream()
+        .use { input -> load(input) }
 }
 
 android {
@@ -18,6 +26,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "int",
+            "XPOSED_TARGET_API_VERSION",
+            requireNotNull(xposedModuleProperties.getProperty("targetApiVersion")) {
+                "Missing targetApiVersion in module.prop"
+            }
+        )
     }
 
     buildTypes {

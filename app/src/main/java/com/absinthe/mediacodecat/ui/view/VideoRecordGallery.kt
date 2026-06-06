@@ -8,9 +8,17 @@ import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaFormat
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +37,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -41,7 +50,17 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -56,6 +75,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -64,6 +84,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -80,6 +101,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.absinthe.mediacodecat.BuildConfig
 import com.absinthe.mediacodecat.R
 import com.absinthe.mediacodecat.data.DataSource
 import com.absinthe.mediacodecat.data.VideoCoverStore
@@ -101,6 +123,7 @@ import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -120,6 +143,9 @@ fun VideoRecordGallery(
     var canLoadMore by remember { mutableStateOf(false) }
     var loadGeneration by remember { mutableIntStateOf(0) }
     var coverVersion by remember { mutableIntStateOf(0) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val deletedMessage = stringResource(R.string.video_record_deleted)
+    val undoLabel = stringResource(R.string.undo)
 
     fun refreshRecords() {
         val generation = loadGeneration + 1
@@ -161,6 +187,36 @@ fun VideoRecordGallery(
             totalRecordsCount = page.totalCount
             canLoadMore = page.hasMore && mergedRecords.size < page.totalCount
             isLoadingPage = false
+        }
+    }
+
+    fun deleteRecord(record: VideoRecord) {
+        records = records.filterNot { it.sessionId == record.sessionId }
+        totalRecordsCount = (totalRecordsCount - 1).coerceAtLeast(0)
+
+        scope.launch {
+            val deleted = withContext(Dispatchers.IO) {
+                DataSource.deleteVideoRecord(appContext, record.sessionId)
+            }
+            if (!deleted) {
+                refreshRecords()
+                return@launch
+            }
+
+            val snackbarResult = withTimeoutOrNull(DeleteUndoDurationMillis) {
+                snackbarHostState.currentSnackbarData?.dismiss()
+                snackbarHostState.showSnackbar(
+                    message = deletedMessage,
+                    actionLabel = undoLabel,
+                    duration = SnackbarDuration.Indefinite
+                )
+            }
+
+            if (snackbarResult == SnackbarResult.ActionPerformed) {
+                withContext(Dispatchers.IO) {
+                    DataSource.restoreVideoRecord(appContext, record)
+                }
+            }
         }
     }
 
@@ -210,6 +266,7 @@ fun VideoRecordGallery(
                     isLoadingMore = isLoadingPage && isLoaded,
                     canLoadMore = canLoadMore,
                     onLoadMore = ::loadNextPage,
+                    onDeleteRecord = ::deleteRecord,
                     highlightAngle = highlightAngle,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -220,6 +277,17 @@ fun VideoRecordGallery(
             backdrop = headerBackdrop,
             recordsCount = totalRecordsCount,
             modifier = Modifier.fillMaxWidth()
+        )
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = GallerySnackbarBottomPadding
+                )
         )
     }
 }
@@ -232,6 +300,7 @@ private fun RecordGrid(
     isLoadingMore: Boolean,
     canLoadMore: Boolean,
     onLoadMore: () -> Unit,
+    onDeleteRecord: (VideoRecord) -> Unit,
     highlightAngle: () -> Float,
     modifier: Modifier = Modifier
 ) {
@@ -275,10 +344,11 @@ private fun RecordGrid(
             ) { item ->
                 when (item) {
                     is VideoGalleryItem.Header -> DateHeader(item)
-                    is VideoGalleryItem.RecordCell -> VideoRecordCard(
+                    is VideoGalleryItem.RecordCell -> DismissibleVideoRecordCard(
                         record = item.record,
                         backdrop = backdrop,
                         coverVersion = coverVersion,
+                        onDelete = onDeleteRecord,
                         highlightAngle = highlightAngle
                     )
                 }
@@ -302,6 +372,75 @@ private fun rememberShouldLoadMore(gridState: LazyGridState) = remember(gridStat
         val layoutInfo = gridState.layoutInfo
         val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
         lastVisibleIndex >= layoutInfo.totalItemsCount - LoadMorePrefetchItemThreshold
+    }
+}
+
+@Composable
+private fun DismissibleVideoRecordCard(
+    record: VideoRecord,
+    backdrop: Backdrop,
+    coverVersion: Int,
+    onDelete: (VideoRecord) -> Unit,
+    highlightAngle: () -> Float,
+    modifier: Modifier = Modifier
+) {
+    val dismissState = remember(record.sessionId) {
+        SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled) { distance ->
+            distance * SwipeDismissThresholdFraction
+        }
+    }
+    var deleteRequested by remember(record.sessionId) { mutableStateOf(false) }
+
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            DeleteRecordSwipeBackground(
+                direction = dismissState.dismissDirection,
+                modifier = Modifier.fillMaxSize()
+            )
+        },
+        modifier = modifier.fillMaxWidth(),
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = true,
+        onDismiss = {
+            if (!deleteRequested) {
+                deleteRequested = true
+                onDelete(record)
+            }
+        }
+    ) {
+        VideoRecordCard(
+            record = record,
+            backdrop = backdrop,
+            coverVersion = coverVersion,
+            highlightAngle = highlightAngle
+        )
+    }
+}
+
+@Composable
+private fun DeleteRecordSwipeBackground(
+    direction: SwipeToDismissBoxValue,
+    modifier: Modifier = Modifier
+) {
+    val alignment =
+        if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart
+        else Alignment.CenterEnd
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.errorContainer),
+        contentAlignment = alignment
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Delete,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .size(24.dp)
+        )
     }
 }
 
@@ -619,13 +758,8 @@ private fun PackageIcon(
             }.getOrNull()
         }
     }
-    val shape = RoundedCornerShape(4.dp)
-
     Box(
-        modifier = modifier
-            .size(PackageIconSize)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f)),
+        modifier = modifier.size(PackageIconSize),
         contentAlignment = Alignment.Center
     ) {
         if (icon != null) {
@@ -784,18 +918,8 @@ private fun EmptyRecordState(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(96.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                                )
-                            )
-                        )
+                LsposedScopeTutorialAnimation(
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = stringResource(R.string.empty_video_records),
@@ -803,7 +927,543 @@ private fun EmptyRecordState(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
+                Text(
+                    text = stringResource(R.string.empty_video_records_tutorial),
+                    modifier = Modifier.padding(top = 6.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun LsposedScopeTutorialAnimation(
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "lsposed_scope_tutorial")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = TutorialAnimationDurationMillis,
+                easing = FastOutSlowInEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "lsposed_scope_tutorial_progress"
+    )
+    val pageProgress = ((progress - 0.38f) / 0.18f).coerceIn(0f, 1f)
+    val checkedProgress = ((progress - 0.68f) / 0.18f).coerceIn(0f, 1f)
+    val highlightAlpha = (0.1f + 0.1f * (1f - kotlin.math.abs(progress - 0.28f) / 0.35f))
+        .coerceIn(0.08f, 0.2f)
+    val moduleTouchProgress = (progress / 0.34f).coerceIn(0f, 1f)
+    val scopeTouchProgress = ((progress - 0.6f) / 0.24f).coerceIn(0f, 1f)
+    val touchPulse = if (progress < 0.34f || progress in 0.6f..0.86f) {
+        kotlin.math.sin(progress * kotlin.math.PI.toFloat() * 6f).coerceAtLeast(0f)
+    } else {
+        0f
+    }
+    val skeletonAlpha =
+        0.32f + 0.18f * ((kotlin.math.sin(progress * kotlin.math.PI.toFloat() * 4f) + 1f) / 2f)
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier = modifier
+            .width(TutorialAnimationWidth)
+            .height(TutorialAnimationHeight),
+        contentAlignment = Alignment.Center
+    ) {
+        TutorialModuleListPage(
+            selectedAlpha = highlightAlpha,
+            skeletonAlpha = skeletonAlpha,
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(x = (-18 * pageProgress).dp)
+                .alpha(1f - pageProgress)
+        )
+        TutorialScopePage(
+            checkedProgress = checkedProgress,
+            highlightAlpha = 0.1f + checkedProgress * 0.1f,
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(x = (18 * (1f - pageProgress)).dp)
+                .alpha(pageProgress)
+        )
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val moduleStart = Offset(size.width * 0.78f, size.height * 0.28f)
+            val moduleEnd = Offset(size.width * 0.48f, size.height * 0.6f)
+            val scopeStart = Offset(size.width * 0.34f, size.height * 0.68f)
+            val scopeEnd = Offset(size.width * 0.87f, size.height * 0.68f)
+            val touch = if (progress < 0.5f) {
+                Offset(
+                    x = moduleStart.x + (moduleEnd.x - moduleStart.x) * moduleTouchProgress,
+                    y = moduleStart.y + (moduleEnd.y - moduleStart.y) * moduleTouchProgress
+                )
+            } else {
+                Offset(
+                    x = scopeStart.x + (scopeEnd.x - scopeStart.x) * scopeTouchProgress,
+                    y = scopeStart.y + (scopeEnd.y - scopeStart.y) * scopeTouchProgress
+                )
+            }
+            val touchAlpha = when {
+                progress < 0.38f -> 1f
+                progress < 0.58f -> 0f
+                else -> 1f
+            }
+            val radius = 8.dp.toPx() + touchPulse * 8.dp.toPx()
+
+            drawCircle(
+                color = primaryColor.copy(alpha = 0.18f * touchAlpha),
+                radius = radius,
+                center = touch
+            )
+            drawCircle(
+                color = primaryColor.copy(alpha = 0.74f * touchAlpha),
+                radius = 4.dp.toPx(),
+                center = touch
+            )
+        }
+    }
+}
+
+@Composable
+private fun TutorialModuleListPage(
+    selectedAlpha: Float,
+    skeletonAlpha: Float,
+    modifier: Modifier = Modifier
+) {
+    val pageBackground =
+        if (isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        else Color(0xFFFFEAE6)
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(pageBackground)
+            .border(
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                RoundedCornerShape(14.dp)
+            )
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.empty_video_records_modules_title),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold
+            )
+            TutorialSearchGlyph()
+        }
+
+        TutorialModuleRow(
+            skeleton = true,
+            skeletonAlpha = skeletonAlpha,
+            dimmed = true
+        )
+        TutorialModuleRow(
+            title = stringResource(R.string.app_name),
+            description = stringResource(R.string.xposed_description),
+            badge = "API ${BuildConfig.XPOSED_TARGET_API_VERSION}",
+            selectedAlpha = selectedAlpha
+        )
+        TutorialModuleRow(
+            skeleton = true,
+            skeletonAlpha = skeletonAlpha,
+            dimmed = true
+        )
+    }
+}
+
+@Composable
+private fun TutorialModuleRow(
+    title: String = "",
+    description: String = "",
+    badge: String = "",
+    modifier: Modifier = Modifier,
+    selectedAlpha: Float = 0f,
+    dimmed: Boolean = false,
+    skeleton: Boolean = false,
+    skeletonAlpha: Float = 0f
+) {
+    val contentAlpha = if (dimmed) 0.54f else 1f
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.84f + selectedAlpha))
+            .border(
+                BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = selectedAlpha * 1.5f)),
+                RoundedCornerShape(12.dp)
+            )
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TutorialAppIcon(
+            color = if (dimmed) {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.primary
+            },
+            modifier = Modifier
+                .size(28.dp)
+                .alpha(contentAlpha)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            if (skeleton) {
+                TutorialSkeletonLine(
+                    width = 98.dp,
+                    height = 12.dp,
+                    alpha = skeletonAlpha
+                )
+                TutorialSkeletonLine(
+                    width = 122.dp,
+                    height = 8.dp,
+                    alpha = skeletonAlpha,
+                    modifier = Modifier.padding(top = 7.dp)
+                )
+            } else {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+                    fontWeight = if (dimmed) FontWeight.Normal else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        if (skeleton) {
+            TutorialSkeletonLine(
+                width = 42.dp,
+                height = 20.dp,
+                alpha = skeletonAlpha,
+                cornerRadius = 6.dp
+            )
+        } else {
+            Text(
+                text = badge,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFFFFCC7A).copy(alpha = if (dimmed) 0.45f else 0.9f))
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF5E4A24).copy(alpha = contentAlpha),
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun TutorialSkeletonLine(
+    width: Dp,
+    height: Dp,
+    alpha: Float,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = height / 2f
+) {
+    Box(
+        modifier = modifier
+            .width(width)
+            .height(height)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+    )
+}
+
+@Composable
+private fun TutorialSearchGlyph(
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier.size(22.dp)) {
+        val color = Color(0xFF6F5E5C)
+        drawCircle(
+            color = color,
+            radius = 6.dp.toPx(),
+            center = Offset(size.width * 0.42f, size.height * 0.42f),
+            style = Stroke(width = 2.dp.toPx())
+        )
+        drawLine(
+            color = color,
+            start = Offset(size.width * 0.62f, size.height * 0.62f),
+            end = Offset(size.width * 0.82f, size.height * 0.82f),
+            strokeWidth = 2.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+private fun TutorialScopePage(
+    checkedProgress: Float,
+    highlightAlpha: Float,
+    modifier: Modifier = Modifier
+) {
+    val surfaceColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+    val outlineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(surfaceColor)
+            .border(
+                BorderStroke(1.dp, outlineColor),
+                RoundedCornerShape(14.dp)
+            )
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TutorialScopeHeader()
+        TutorialScopeSearchBar()
+
+        TutorialAppRow(
+            title = stringResource(R.string.empty_video_records_target_app),
+            subtitle = stringResource(R.string.empty_video_records_target_package),
+            highlightAlpha = highlightAlpha,
+            checkedProgress = checkedProgress
+        )
+        TutorialInactiveAppRow(
+            title = stringResource(R.string.empty_video_records_other_app),
+            subtitle = stringResource(R.string.empty_video_records_other_package)
+        )
+    }
+}
+
+@Composable
+private fun TutorialScopeHeader(
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
+        )
+        Text(
+            text = stringResource(R.string.empty_video_records_scope_title),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        repeat(2) {
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun TutorialScopeSearchBar(
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f))
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .border(
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)),
+                    RoundedCornerShape(percent = 50)
+                )
+        )
+        Text(
+            text = stringResource(R.string.empty_video_records_search_apps),
+            modifier = Modifier.padding(start = 8.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun TutorialAppRow(
+    title: String,
+    subtitle: String,
+    highlightAlpha: Float,
+    checkedProgress: Float,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = highlightAlpha))
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TutorialAppIcon(
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(26.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        TutorialScopeCheckbox(progress = checkedProgress)
+    }
+}
+
+@Composable
+private fun TutorialInactiveAppRow(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TutorialAppIcon(
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+            modifier = Modifier.size(24.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.54f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        TutorialScopeCheckbox(progress = 0f, enabled = false)
+    }
+}
+
+@Composable
+private fun TutorialAppIcon(
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(7.dp))
+            .background(color.copy(alpha = 0.18f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(color)
+        )
+    }
+}
+
+@Composable
+private fun TutorialScopeCheckbox(
+    progress: Float,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    val borderColor =
+        if (enabled) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.56f + progress * 0.44f)
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.34f)
+        }
+    val fillColor =
+        if (enabled) {
+            MaterialTheme.colorScheme.primary.copy(alpha = progress)
+        } else {
+            Color.Transparent
+        }
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val cornerRadius = 5.dp.toPx()
+        drawRoundRect(
+            color = fillColor,
+            cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+        )
+        drawRoundRect(
+            color = borderColor,
+            cornerRadius = CornerRadius(cornerRadius, cornerRadius),
+            style = Stroke(width = 1.5.dp.toPx())
+        )
+        if (progress > 0f) {
+            val checkAlpha = progress.coerceIn(0f, 1f)
+            val start = Offset(size.width * 0.28f, size.height * 0.52f)
+            val middle = Offset(size.width * 0.44f, size.height * 0.68f)
+            val end = Offset(size.width * 0.74f, size.height * 0.34f)
+            drawLine(
+                color = Color.White.copy(alpha = checkAlpha),
+                start = start,
+                end = middle,
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = Color.White.copy(alpha = checkAlpha),
+                start = middle,
+                end = end,
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round
+            )
         }
     }
 }
@@ -1648,9 +2308,21 @@ private const val LoadMorePrefetchItemThreshold = 6
 
 private const val LoadingMoreItemKey = "loading_more"
 
+private const val DeleteUndoDurationMillis = 5_000L
+
+private const val SwipeDismissThresholdFraction = 0.38f
+
 private val GalleryHeaderContentHeight = 132.dp
 
 private val GalleryHeaderMaskHeight = 156.dp
+
+private val GallerySnackbarBottomPadding = 104.dp
+
+private const val TutorialAnimationDurationMillis = 2_800
+
+private val TutorialAnimationWidth = 248.dp
+
+private val TutorialAnimationHeight = 224.dp
 
 private val ResolutionBadgeWidth = 22.dp
 
