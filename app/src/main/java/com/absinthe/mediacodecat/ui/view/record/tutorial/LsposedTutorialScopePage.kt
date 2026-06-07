@@ -12,14 +12,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -29,6 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.absinthe.mediacodecat.R
+import com.absinthe.mediacodecat.ui.util.drawContinuousRoundedRect
+import com.kyant.capsule.ContinuousCapsule
+import com.kyant.capsule.ContinuousRoundedRectangle
 
 @Composable
 internal fun TutorialScopePage(
@@ -41,11 +42,11 @@ internal fun TutorialScopePage(
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(ContinuousRoundedRectangle(14.dp))
             .background(surfaceColor)
             .border(
                 BorderStroke(1.dp, outlineColor),
-                RoundedCornerShape(14.dp)
+                ContinuousRoundedRectangle(14.dp)
             )
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -78,7 +79,7 @@ private fun TutorialScopeHeader(
         Box(
             modifier = Modifier
                 .size(18.dp)
-                .clip(RoundedCornerShape(percent = 50))
+                .clip(ContinuousCapsule)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
         )
         Text(
@@ -94,7 +95,7 @@ private fun TutorialScopeHeader(
             Box(
                 modifier = Modifier
                     .size(4.dp)
-                    .clip(RoundedCornerShape(percent = 50))
+                    .clip(ContinuousCapsule)
                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f))
             )
         }
@@ -109,7 +110,7 @@ private fun TutorialScopeSearchBar(
         modifier = modifier
             .fillMaxWidth()
             .height(24.dp)
-            .clip(RoundedCornerShape(percent = 50))
+            .clip(ContinuousCapsule)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f))
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -117,10 +118,10 @@ private fun TutorialScopeSearchBar(
         Box(
             modifier = Modifier
                 .size(8.dp)
-                .clip(RoundedCornerShape(percent = 50))
+                .clip(ContinuousCapsule)
                 .border(
                     BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)),
-                    RoundedCornerShape(percent = 50)
+                    ContinuousCapsule
                 )
         )
         Text(
@@ -145,7 +146,7 @@ private fun TutorialAppRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(ContinuousRoundedRectangle(10.dp))
             .background(MaterialTheme.colorScheme.primary.copy(alpha = highlightAlpha))
             .padding(horizontal = 10.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -236,13 +237,13 @@ private fun TutorialScopeCheckbox(
 
     Canvas(modifier = modifier.size(22.dp)) {
         val cornerRadius = 5.dp.toPx()
-        drawRoundRect(
+        drawContinuousRoundedRect(
             color = fillColor,
-            cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+            cornerRadius = cornerRadius
         )
-        drawRoundRect(
+        drawContinuousRoundedRect(
             color = borderColor,
-            cornerRadius = CornerRadius(cornerRadius, cornerRadius),
+            cornerRadius = cornerRadius,
             style = Stroke(width = 1.5.dp.toPx())
         )
         if (progress > 0f) {

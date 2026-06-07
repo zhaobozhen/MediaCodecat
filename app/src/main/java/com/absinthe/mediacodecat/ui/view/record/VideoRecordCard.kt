@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,7 +28,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -48,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.absinthe.mediacodecat.data.VideoCoverStore
 import com.absinthe.mediacodecat.model.VideoRecord
+import com.absinthe.mediacodecat.ui.util.drawContinuousRoundedRect
 import com.absinthe.mediacodecat.ui.view.record.formatter.VideoRecordStrings
 import com.absinthe.mediacodecat.ui.view.record.formatter.aspectRatio
 import com.absinthe.mediacodecat.ui.view.record.formatter.attributeLabels
@@ -60,6 +59,7 @@ import com.absinthe.mediacodecat.ui.view.record.formatter.timeRangeTitle
 import com.absinthe.mediacodecat.ui.view.record.formatter.toAnnotatedString
 import com.absinthe.mediacodecat.ui.view.record.formatter.usesSideCoverLayout
 import com.absinthe.mediacodecat.ui.view.record.formatter.videoRecordStrings
+import com.kyant.capsule.ContinuousRoundedRectangle
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,7 +71,7 @@ internal fun VideoRecordCard(
     modifier: Modifier = Modifier
 ) {
     val strings = videoRecordStrings()
-    val shape = RoundedCornerShape(8.dp)
+    val shape = ContinuousRoundedRectangle(8.dp)
     val containerColor = MaterialTheme.colorScheme.surface
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.56f)
 
@@ -239,14 +239,14 @@ private fun ResolutionRatioBadge(
             rectHeightPx / 2f
         )
 
-        drawRoundRect(
+        drawContinuousRoundedRect(
             color = outlineColor,
             topLeft = Offset(
                 x = (size.width - rectWidthPx) / 2f,
                 y = (size.height - rectHeightPx) / 2f
             ),
             size = Size(rectWidthPx, rectHeightPx),
-            cornerRadius = CornerRadius(cornerRadius, cornerRadius),
+            cornerRadius = cornerRadius,
             style = Stroke(width = ResolutionBadgeStrokeWidth.toPx())
         )
     }
@@ -319,7 +319,7 @@ private fun PackageIcon(
             Box(
                 modifier = Modifier
                     .size(8.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(ContinuousRoundedRectangle(2.dp))
                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f))
             )
         }
@@ -351,7 +351,7 @@ private fun AttributeChip(
     Text(
         text = text,
         modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(ContinuousRoundedRectangle(4.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f))
             .padding(horizontal = 6.dp, vertical = 3.dp),
         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
@@ -389,7 +389,7 @@ private fun VideoCoverPlaceholder(
             }
         }
     }
-    val shape = RoundedCornerShape(6.dp)
+    val shape = ContinuousRoundedRectangle(6.dp)
     val coverColors = record.coverColors(MaterialTheme.colorScheme)
 
     Box(

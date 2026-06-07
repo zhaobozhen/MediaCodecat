@@ -31,7 +31,6 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Icon
@@ -73,6 +72,8 @@ import com.absinthe.mediacodecat.data.DataSource
 import com.absinthe.mediacodecat.data.VideoRecordContract
 import com.absinthe.mediacodecat.model.VideoRecord
 import com.absinthe.mediacodecat.ui.view.record.formatter.dateTitle
+import com.kyant.capsule.ContinuousCapsule
+import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -267,7 +268,7 @@ private fun LiquidUndoSnackbar(
     modifier: Modifier = Modifier
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(percent = 50)
+    val shape = ContinuousCapsule
     val containerColor = colorScheme.surfaceContainerHighest.copy(alpha = 0.48f)
     val actionLabel = snackbarData.visuals.actionLabel
 
@@ -470,7 +471,7 @@ private fun DeleteRecordSwipeBackground(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(ContinuousRoundedRectangle(8.dp))
             .background(MaterialTheme.colorScheme.errorContainer),
         contentAlignment = alignment
     ) {

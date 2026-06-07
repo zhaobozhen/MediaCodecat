@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.absinthe.mediacodecat.BuildConfig
 import com.absinthe.mediacodecat.R
+import com.kyant.capsule.ContinuousRoundedRectangle
 
 @Composable
 internal fun TutorialModuleListPage(
@@ -43,11 +43,11 @@ internal fun TutorialModuleListPage(
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(ContinuousRoundedRectangle(14.dp))
             .background(pageBackground)
             .border(
                 BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                RoundedCornerShape(14.dp)
+                ContinuousRoundedRectangle(14.dp)
             )
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -101,11 +101,11 @@ private fun TutorialModuleRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(ContinuousRoundedRectangle(12.dp))
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.84f + selectedAlpha))
             .border(
                 BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = selectedAlpha * 1.5f)),
-                RoundedCornerShape(12.dp)
+                ContinuousRoundedRectangle(12.dp)
             )
             .padding(horizontal = 10.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -163,7 +163,7 @@ private fun TutorialModuleRow(
             Text(
                 text = badge,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(ContinuousRoundedRectangle(6.dp))
                     .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = if (dimmed) 0.45f else 0.9f))
                     .padding(horizontal = 7.dp, vertical = 3.dp),
                 style = MaterialTheme.typography.labelSmall,
@@ -186,7 +186,7 @@ private fun TutorialSkeletonLine(
         modifier = modifier
             .width(width)
             .height(height)
-            .clip(RoundedCornerShape(cornerRadius))
+            .clip(ContinuousRoundedRectangle(cornerRadius))
             .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
     )
 }
@@ -221,14 +221,14 @@ internal fun TutorialAppIcon(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(7.dp))
+            .clip(ContinuousRoundedRectangle(7.dp))
             .background(color.copy(alpha = 0.18f)),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .size(10.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .clip(ContinuousRoundedRectangle(3.dp))
                 .background(color)
         )
     }
