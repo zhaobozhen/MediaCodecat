@@ -90,6 +90,7 @@ dependencies {
     implementation(libs.aboutlibraries.compose.m3)
     implementation(libs.backdrop)
     implementation(libs.capsule)
+    implementation(libs.shapes)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

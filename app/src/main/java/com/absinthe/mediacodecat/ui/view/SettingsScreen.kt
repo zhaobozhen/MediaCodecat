@@ -2,14 +2,12 @@ package com.absinthe.mediacodecat.ui.view
 
 import android.graphics.Bitmap
 import android.graphics.RuntimeShader
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,13 +22,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Info
@@ -44,11 +41,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,31 +58,45 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastCoerceIn
+import androidx.compose.ui.util.lerp as lerpFloat
 import com.absinthe.mediacodecat.BuildConfig
 import com.absinthe.mediacodecat.R
 import com.absinthe.mediacodecat.settings.HookSettings
+import com.absinthe.mediacodecat.utils.DampedDragAnimation
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
+import com.kyant.capsule.ContinuousRoundedRectangle
+import com.kyant.shapes.Capsule
 import com.mikepenz.aboutlibraries.ui.compose.LibraryDefaults
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
 import com.mikepenz.aboutlibraries.ui.compose.m3.libraryColors
@@ -89,6 +104,7 @@ import com.mikepenz.aboutlibraries.ui.compose.produceLibraries
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
@@ -131,7 +147,7 @@ private fun SettingsHomeScreen(
                 end = safeDrawingPadding.calculateEndPadding(layoutDirection) + 16.dp,
                 bottom = safeDrawingPadding.calculateBottomPadding() + 112.dp
             ),
-        verticalArrangement = Arrangement.spacedBy(28.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
             text = stringResource(R.string.settings_title),
@@ -171,7 +187,7 @@ private fun CaptureSettingsCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = ContinuousRoundedRectangle(20.dp),
         border = BorderStroke(1.dp, colors.settingsCardBorder),
         colors = CardDefaults.cardColors(containerColor = colors.settingsCardBackground)
     ) {
@@ -190,13 +206,7 @@ private fun CaptureSettingsCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .toggleable(
-                        value = nativeInlineHookEnabled,
-                        role = Role.Switch,
-                        onValueChange = onNativeInlineHookEnabledChange
-                    )
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 0.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -217,8 +227,10 @@ private fun CaptureSettingsCard(
                     )
                 }
                 LiquidSettingsSwitch(
-                    checked = nativeInlineHookEnabled,
-                    backdrop = backdrop
+                    selected = { nativeInlineHookEnabled },
+                    onSelect = onNativeInlineHookEnabledChange,
+                    backdrop = backdrop,
+                    modifier = Modifier.padding(horizontal = LiquidToggleOverflowPadding)
                 )
             }
         }
@@ -227,86 +239,166 @@ private fun CaptureSettingsCard(
 
 @Composable
 private fun LiquidSettingsSwitch(
-    checked: Boolean,
+    selected: () -> Boolean,
+    onSelect: (Boolean) -> Unit,
     backdrop: Backdrop,
     modifier: Modifier = Modifier
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val progress by animateFloatAsState(
-        targetValue = if (checked) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.78f, stiffness = 520f),
-        label = "liquidSettingsSwitchProgress"
-    )
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 27.dp else 3.dp,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = 540f),
-        label = "liquidSettingsSwitchThumbOffset"
-    )
-    val trackColor = lerp(
-        colorScheme.surfaceContainerHighest.copy(alpha = 0.46f),
-        colorScheme.primary.copy(alpha = 0.28f),
-        progress
-    )
-    val thumbColor = lerp(
-        colorScheme.surface.copy(alpha = 0.74f),
-        colorScheme.primaryContainer.copy(alpha = 0.64f),
-        progress
-    )
+    val isLightTheme = !isSystemInDarkTheme()
+    val accentColor =
+        if (isLightTheme) Color(0xFF34C759)
+        else Color(0xFF30D158)
+    val trackColor =
+        if (isLightTheme) Color(0xFF787878).copy(0.2f)
+        else Color(0xFF787880).copy(0.36f)
+    val density = LocalDensity.current
+    val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val dragWidth = with(density) { 20f.dp.toPx() }
+    val animationScope = rememberCoroutineScope()
+    var didDrag by remember { mutableStateOf(false) }
+    var fraction by remember { mutableFloatStateOf(if (selected()) 1f else 0f) }
+    val dampedDragAnimation = remember(animationScope) {
+        DampedDragAnimation(
+            animationScope = animationScope,
+            initialValue = fraction,
+            valueRange = 0f..1f,
+            visibilityThreshold = 0.001f,
+            initialScale = 1f,
+            pressedScale = 1.5f,
+            onDragStarted = {},
+            onDragStopped = {
+                if (didDrag) {
+                    fraction = if (targetValue >= 0.5f) 1f else 0f
+                    onSelect(fraction == 1f)
+                    didDrag = false
+                } else {
+                    fraction = if (selected()) 0f else 1f
+                    onSelect(fraction == 1f)
+                }
+            },
+            onDrag = { _, dragAmount ->
+                if (!didDrag) {
+                    didDrag = dragAmount.x != 0f
+                }
+                val delta = dragAmount.x / dragWidth
+                fraction =
+                    if (isLtr) (fraction + delta).fastCoerceIn(0f, 1f)
+                    else (fraction - delta).fastCoerceIn(0f, 1f)
+            }
+        )
+    }
+    LaunchedEffect(dampedDragAnimation) {
+        snapshotFlow { fraction }
+            .collectLatest { fraction ->
+                dampedDragAnimation.updateValue(fraction)
+            }
+    }
+    LaunchedEffect(selected) {
+        snapshotFlow { selected() }
+            .collectLatest { isSelected ->
+                val target = if (isSelected) 1f else 0f
+                if (target != fraction) {
+                    fraction = target
+                    dampedDragAnimation.animateToValue(target)
+                }
+            }
+    }
+    val trackBackdrop = rememberLayerBackdrop()
 
     Box(
         modifier = modifier
-            .size(width = 58.dp, height = 34.dp)
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { ContinuousCapsule },
-                effects = {
-                    vibrancy()
-                    blur(8f.dp.toPx())
-                    lens(8f.dp.toPx(), 12f.dp.toPx())
-                },
-                highlight = {
-                    Highlight.Default.copy(alpha = 0.26f + progress * 0.16f)
-                },
-                shadow = {
-                    Shadow(radius = 8.dp, alpha = 0.12f + progress * 0.06f)
-                },
-                innerShadow = {
-                    InnerShadow(radius = 6.dp, alpha = 0.2f)
-                },
-                onDrawSurface = {
-                    drawRect(trackColor)
+            .clickable(
+                interactionSource = null,
+                indication = null,
+                role = Role.Switch,
+                onClick = {
+                    val target = if (selected()) 0f else 1f
+                    fraction = target
+                    onSelect(target == 1f)
+                    dampedDragAnimation.animateToValue(target)
                 }
-            )
+            ),
+        contentAlignment = Alignment.CenterStart
     ) {
         Box(
             modifier = Modifier
-                .offset(x = thumbOffset, y = 3.dp)
-                .size(28.dp)
+                .layerBackdrop(trackBackdrop)
+                .clip(Capsule())
+                .drawBehind {
+                    val fraction = dampedDragAnimation.value
+                    drawRect(lerp(trackColor, accentColor, fraction))
+                }
+                .size(64f.dp, 28f.dp)
+        )
+        Box(
+            modifier = Modifier
+                .graphicsLayer {
+                    val fraction = dampedDragAnimation.value
+                    val padding = 2f.dp.toPx()
+                    translationX =
+                        if (isLtr) lerpFloat(padding, padding + dragWidth, fraction)
+                        else lerpFloat(-padding, -(padding + dragWidth), fraction)
+                }
+                .semantics {
+                    role = Role.Switch
+                }
+                .then(dampedDragAnimation.modifier)
                 .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { ContinuousCapsule },
+                    backdrop = rememberCombinedBackdrop(
+                        backdrop,
+                        rememberBackdrop(trackBackdrop) { drawBackdrop ->
+                            val progress = dampedDragAnimation.pressProgress
+                            val scaleX = lerpFloat(2f / 3f, 0.75f, progress)
+                            val scaleY = lerpFloat(0f, 0.75f, progress)
+                            scale(scaleX, scaleY) {
+                                drawBackdrop()
+                            }
+                        }
+                    ),
+                    shape = { Capsule() },
                     effects = {
-                        vibrancy()
-                        blur(6f.dp.toPx())
+                        val progress = dampedDragAnimation.pressProgress
+                        blur(8f.dp.toPx() * (1f - progress))
                         lens(
-                            6f.dp.toPx() + 4f.dp.toPx() * progress,
-                            8f.dp.toPx() + 4f.dp.toPx() * progress,
-                            chromaticAberration = checked
+                            5f.dp.toPx() * progress,
+                            10f.dp.toPx() * progress,
+                            chromaticAberration = true
                         )
                     },
                     highlight = {
-                        Highlight.Default.copy(alpha = 0.42f + progress * 0.18f)
+                        val progress = dampedDragAnimation.pressProgress
+                        Highlight.Ambient.copy(
+                            width = Highlight.Ambient.width / 1.5f,
+                            blurRadius = Highlight.Ambient.blurRadius / 1.5f,
+                            alpha = progress
+                        )
                     },
                     shadow = {
-                        Shadow(radius = 10.dp, alpha = 0.18f + progress * 0.08f)
+                        Shadow(
+                            radius = 4f.dp,
+                            color = Color.Black.copy(alpha = 0.05f)
+                        )
                     },
                     innerShadow = {
-                        InnerShadow(radius = 5.dp, alpha = 0.22f)
+                        val progress = dampedDragAnimation.pressProgress
+                        InnerShadow(
+                            radius = 4f.dp * progress,
+                            alpha = progress
+                        )
+                    },
+                    layerBlock = {
+                        scaleX = dampedDragAnimation.scaleX
+                        scaleY = dampedDragAnimation.scaleY
+                        val velocity = dampedDragAnimation.velocity / 50f
+                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
                     },
                     onDrawSurface = {
-                        drawRect(thumbColor)
+                        val progress = dampedDragAnimation.pressProgress
+                        drawRect(Color.White.copy(alpha = 1f - progress))
                     }
                 )
+                .size(40f.dp, 24f.dp)
         )
     }
 }
@@ -322,7 +414,7 @@ private fun AppInfoCard(
         modifier = modifier
             .fillMaxWidth()
             .height(260.dp),
-        shape = RoundedCornerShape(20.dp),
+        shape = ContinuousRoundedRectangle(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.Transparent
         )
@@ -350,7 +442,7 @@ private fun AppInfoCard(
                 ) {
                     AppIcon(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(18.dp))
+                            .clip(ContinuousRoundedRectangle(18.dp))
                             .size(64.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -509,7 +601,7 @@ private fun AppInfoActionButton(
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.height(44.dp),
-        shape = RoundedCornerShape(percent = 50),
+        shape = ContinuousCapsule,
         border = BorderStroke(1.dp, colors.cardActionBorder),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = Color.Transparent,
@@ -645,6 +737,7 @@ private fun OpenSourceNoticesHeader(
 
 private const val OpenSourceNoticesHeaderKey = "open_source_notices_header"
 
+private val LiquidToggleOverflowPadding = 8.dp
 private const val AppIconBitmapSizePx = 192
 private const val SourceCodeUrl = "https://github.com/zhaobozhen/MediaCodecat"
 private const val NanosPerSecond = 1_000_000_000f

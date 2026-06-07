@@ -12,7 +12,7 @@
     <string name="settings_about_section">About</string>
     <string name="settings_capture_section">Capture</string>
     <string name="settings_native_inline_hook">Native AMediaCodec inline hook</string>
-    <string name="settings_native_inline_hook_description">Experimental. May crash some systems; restart target apps after changing.</string>
+    <string name="settings_native_inline_hook_description">Experimental. May cause crash. restart target apps after changing.</string>
     <string name="settings_open_source">OSS Licences</string>
     <string name="settings_open_source_description">Licenses for third-party libraries</string>
     <string name="settings_open_source_title">OSS Licences</string>
